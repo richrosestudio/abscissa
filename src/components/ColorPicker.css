@@ -1,0 +1,105 @@
+.cpicker {
+  background: var(--strip-bg);
+  border-radius: 10px;
+  overflow: hidden;
+  padding-bottom: 10px;
+}
+
+/* Let react-colorful's canvas fill the top */
+.cpicker .react-colorful {
+  width: 200px !important;
+  height: 160px !important;
+  border-radius: 0 !important;
+}
+
+.cpicker .react-colorful__saturation {
+  border-radius: 0 !important;
+}
+
+.cpicker .react-colorful__hue {
+  height: 12px;
+  border-radius: 0 !important;
+  margin: 0;
+}
+
+.cpicker .react-colorful__saturation-pointer,
+.cpicker .react-colorful__hue-pointer {
+  width: 16px;
+  height: 16px;
+}
+
+/* Input area */
+.cpicker-inputs {
+  padding: 10px 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cpicker-hex {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cpicker-rgb {
+  display: flex;
+  gap: 6px;
+}
+
+.cpicker-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.cpicker-hex.cpicker-field {
+  flex-direction: row;
+  align-items: center;
+}
+
+.cpicker-label {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  line-height: 1;
+  white-space: nowrap;
+  width: 24px;
+  flex-shrink: 0;
+}
+
+.cpicker-hex .cpicker-label {
+  width: 26px;
+}
+
+.cpicker-input {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Mono', 'Consolas', monospace;
+  padding: 4px 6px;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s ease;
+}
+
+.cpicker-input:focus {
+  border-color: var(--text-muted);
+}
+
+/* Hide number spinner arrows */
+.cpicker-num::-webkit-inner-spin-button,
+.cpicker-num::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cpicker-num {
+  -moz-appearance: textfield;
+  text-align: center;
+}

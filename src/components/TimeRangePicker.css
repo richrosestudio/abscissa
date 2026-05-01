@@ -1,0 +1,78 @@
+.trp {
+  position: absolute;
+  bottom: 46px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  z-index: 10;
+  pointer-events: auto;
+  padding: 3px 5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--chart-bg, var(--bg)) 72%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.trp-btn {
+  background: none;
+  border: none;
+  padding: 3px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: color 0.2s ease, background 0.2s ease;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.trp-btn:hover {
+  color: var(--text-muted);
+}
+
+.trp-btn--active {
+  color: var(--text);
+  background: var(--hover-bg);
+}
+
+/* Live button — slightly larger */
+.trp-btn--live {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 3px 7px;
+}
+
+/* Pulsing dot */
+.trp-live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+  transition: background 0.3s ease;
+}
+
+/* Active live dot — green and pulsing */
+.trp-live-dot--on {
+  background: #22c55e;
+  animation: live-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,  100% { opacity: 1;   transform: scale(1);    }
+  50%        { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* Thin separator between Live and the range buttons */
+.trp-divider {
+  width: 1px;
+  height: 10px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}

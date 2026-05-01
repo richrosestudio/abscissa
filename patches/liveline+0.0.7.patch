@@ -1,0 +1,294 @@
+diff --git a/node_modules/liveline/dist/index.cjs b/node_modules/liveline/dist/index.cjs
+index 4709730..b426875 100644
+--- a/node_modules/liveline/dist/index.cjs
++++ b/node_modules/liveline/dist/index.cjs
+@@ -415,7 +415,7 @@ function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlp
+   ctx.stroke();
+   ctx.globalAlpha = baseAlpha;
+ }
+-function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scrubX, scrubAmount = 0, chartReveal = 1, now_ms = 0, colorBlend = 1, skipDashLine = false, fillScale = 1) {
++function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scrubX, scrubAmount = 0, chartReveal = 1, now_ms = 0, colorBlend = 1, skipDashLine = false, fillScale = 1, extendToNow = true) {
+   const { h, pad, toX, toY, chartW, chartH } = layout;
+   const incomingAlpha = ctx.globalAlpha;
+   const yMin = pad.top;
+@@ -431,15 +431,19 @@ function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scr
+     const baseY = loadingY(t, centerY, amplitude, scroll);
+     return baseY + (rawY - baseY) * localReveal;
+   } : (rawY, _x) => rawY;
++  const doLiveTail = extendToNow !== false;
+   const pts = visible.map((p, i) => {
+     const x = toX(p.time);
+-    const y = i === visible.length - 1 ? morphY(clampY(toY(smoothValue)), x) : morphY(clampY(toY(p.value)), x);
++    const useSmoothLast = doLiveTail && i === visible.length - 1;
++    const y = useSmoothLast ? morphY(clampY(toY(smoothValue)), x) : morphY(clampY(toY(p.value)), x);
+     return [x, y];
+   });
+-  const liveTipX = toX(now);
+-  const fullRightX = pad.left + chartW;
+-  const tipX = chartReveal < 1 ? liveTipX + (fullRightX - liveTipX) * (1 - chartReveal) : liveTipX;
+-  pts.push([tipX, morphY(clampY(toY(smoothValue)), tipX)]);
++  if (doLiveTail) {
++    const liveTipX = toX(now);
++    const fullRightX = pad.left + chartW;
++    const tipX = chartReveal < 1 ? liveTipX + (fullRightX - liveTipX) * (1 - chartReveal) : liveTipX;
++    pts.push([tipX, morphY(clampY(toY(smoothValue)), tipX)]);
++  }
+   if (pts.length < 2) return;
+   let lineAlpha = 1;
+   let fillAlpha = fillScale;
+@@ -1627,6 +1631,7 @@ function drawMultiFrame(ctx, layout, opts) {
+     if (combinedAlpha < 0.01) continue;
+     ctx.save();
+     if (combinedAlpha < 1) ctx.globalAlpha = combinedAlpha;
++    const ext = s.extendToNow !== false;
+     const pts = drawLine(
+       ctx,
+       layout,
+@@ -1639,7 +1644,11 @@ function drawMultiFrame(ctx, layout, opts) {
+       scrubX,
+       opts.scrubAmount,
+       reveal,
+-      opts.now_ms
++      opts.now_ms,
++      1,
++      true,
++      1,
++      ext
+     );
+     ctx.restore();
+     if (pts && pts.length > 0) {
+@@ -2611,7 +2620,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+           data: s.data.slice(),
+           value: s.value,
+           palette: s.palette,
+-          label: s.label
++          label: s.label,
++          extendToNow: s.extendToNow !== false
+         }));
+       }
+       if (hasData && !cfg.isMultiSeries) lastMultiSeriesRef.current = [];
+@@ -3181,7 +3191,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+             if (range.min < globalMin) globalMin = range.min;
+             if (range.max > globalMax) globalMax = range.max;
+           }
+-          seriesEntries.push({ visible, smoothValue: sv, palette: s.palette, label: s.label, alpha });
++          seriesEntries.push({ visible, smoothValue: sv, palette: s.palette, label: s.label, alpha, extendToNow: s.extendToNow !== false });
+         }
+       }
+       if (seriesEntries.length === 0) {
+@@ -3203,7 +3213,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+         rafRef.current = requestAnimationFrame(draw);
+         return;
+       }
+-      const computedRange = { min: isFinite(globalMin) ? globalMin : 0, max: isFinite(globalMax) ? globalMax : 1 };
++      const computedRange = cfg.yDomain ? { min: cfg.yDomain.min, max: cfg.yDomain.max } : { min: isFinite(globalMin) ? globalMin : 0, max: isFinite(globalMax) ? globalMax : 1 };
+       const adaptiveSpeed = cfg.lerpSpeed + ADAPTIVE_SPEED_BOOST * 0.5;
+       const rangeResult = updateRange(
+         computedRange,
+@@ -3559,6 +3569,8 @@ function Liveline({
+   onModeChange,
+   onSeriesToggle,
+   seriesToggleCompact = false,
++  showSeriesChips = true,
++  yDomain,
+   lineWidth,
+   className,
+   style
+@@ -3594,7 +3606,8 @@ function Liveline({
+       data: s.data,
+       value: s.value,
+       palette: seriesPalettes.get(s.id) ?? resolveTheme(s.color || SERIES_COLORS[i % SERIES_COLORS.length], theme),
+-      label: s.label
++      label: s.label,
++      extendToNow: s.extendToNow !== false
+     }));
+   }, [seriesProp, seriesPalettes, theme]);
+   const showMomentum = momentum !== false;
+@@ -3695,7 +3708,8 @@ function Liveline({
+     lineValue,
+     multiSeries,
+     isMultiSeries,
+-    hiddenSeriesIds: hiddenSeries
++    hiddenSeriesIds: hiddenSeries,
++    yDomain
+   });
+   const cursorStyle = scrub ? cursor : "default";
+   const activeColor = isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)";
+@@ -3905,7 +3919,7 @@ function Liveline({
+           ]
+         }
+       ),
+-      showSeriesToggle && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
++      showSeriesToggle && showSeriesChips && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+         display: "inline-flex",
+         gap: ws === "text" ? 4 : 2,
+         background: ws === "text" ? "transparent" : isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+diff --git a/node_modules/liveline/dist/index.d.cts b/node_modules/liveline/dist/index.d.cts
+index 414c4e6..25afd0e 100644
+--- a/node_modules/liveline/dist/index.d.cts
++++ b/node_modules/liveline/dist/index.d.cts
+@@ -45,6 +45,8 @@ interface LivelineSeries {
+     value: number;
+     color: string;
+     label?: string;
++    /** When false, the line ends at the last data point (no horizontal tail to `now`). Default true. */
++    extendToNow?: boolean;
+ }
+ interface LivelineProps {
+     data: LivelinePoint[];
+@@ -92,6 +94,8 @@ interface LivelineProps {
+     onModeChange?: (mode: 'line' | 'candle') => void;
+     onSeriesToggle?: (id: string, visible: boolean) => void;
+     seriesToggleCompact?: boolean;
++    showSeriesChips?: boolean;
++    yDomain?: { min: number; max: number };
+     className?: string;
+     style?: CSSProperties;
+ }
+diff --git a/node_modules/liveline/dist/index.d.ts b/node_modules/liveline/dist/index.d.ts
+index 414c4e6..25afd0e 100644
+--- a/node_modules/liveline/dist/index.d.ts
++++ b/node_modules/liveline/dist/index.d.ts
+@@ -45,6 +45,8 @@ interface LivelineSeries {
+     value: number;
+     color: string;
+     label?: string;
++    /** When false, the line ends at the last data point (no horizontal tail to `now`). Default true. */
++    extendToNow?: boolean;
+ }
+ interface LivelineProps {
+     data: LivelinePoint[];
+@@ -92,6 +94,8 @@ interface LivelineProps {
+     onModeChange?: (mode: 'line' | 'candle') => void;
+     onSeriesToggle?: (id: string, visible: boolean) => void;
+     seriesToggleCompact?: boolean;
++    showSeriesChips?: boolean;
++    yDomain?: { min: number; max: number };
+     className?: string;
+     style?: CSSProperties;
+ }
+diff --git a/node_modules/liveline/dist/index.js b/node_modules/liveline/dist/index.js
+index fd05062..7a7e740 100644
+--- a/node_modules/liveline/dist/index.js
++++ b/node_modules/liveline/dist/index.js
+@@ -388,7 +388,7 @@ function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlp
+   ctx.stroke();
+   ctx.globalAlpha = baseAlpha;
+ }
+-function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scrubX, scrubAmount = 0, chartReveal = 1, now_ms = 0, colorBlend = 1, skipDashLine = false, fillScale = 1) {
++function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scrubX, scrubAmount = 0, chartReveal = 1, now_ms = 0, colorBlend = 1, skipDashLine = false, fillScale = 1, extendToNow = true) {
+   const { h, pad, toX, toY, chartW, chartH } = layout;
+   const incomingAlpha = ctx.globalAlpha;
+   const yMin = pad.top;
+@@ -404,15 +404,19 @@ function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scr
+     const baseY = loadingY(t, centerY, amplitude, scroll);
+     return baseY + (rawY - baseY) * localReveal;
+   } : (rawY, _x) => rawY;
++  const doLiveTail = extendToNow !== false;
+   const pts = visible.map((p, i) => {
+     const x = toX(p.time);
+-    const y = i === visible.length - 1 ? morphY(clampY(toY(smoothValue)), x) : morphY(clampY(toY(p.value)), x);
++    const useSmoothLast = doLiveTail && i === visible.length - 1;
++    const y = useSmoothLast ? morphY(clampY(toY(smoothValue)), x) : morphY(clampY(toY(p.value)), x);
+     return [x, y];
+   });
+-  const liveTipX = toX(now);
+-  const fullRightX = pad.left + chartW;
+-  const tipX = chartReveal < 1 ? liveTipX + (fullRightX - liveTipX) * (1 - chartReveal) : liveTipX;
+-  pts.push([tipX, morphY(clampY(toY(smoothValue)), tipX)]);
++  if (doLiveTail) {
++    const liveTipX = toX(now);
++    const fullRightX = pad.left + chartW;
++    const tipX = chartReveal < 1 ? liveTipX + (fullRightX - liveTipX) * (1 - chartReveal) : liveTipX;
++    pts.push([tipX, morphY(clampY(toY(smoothValue)), tipX)]);
++  }
+   if (pts.length < 2) return;
+   let lineAlpha = 1;
+   let fillAlpha = fillScale;
+@@ -1600,6 +1604,7 @@ function drawMultiFrame(ctx, layout, opts) {
+     if (combinedAlpha < 0.01) continue;
+     ctx.save();
+     if (combinedAlpha < 1) ctx.globalAlpha = combinedAlpha;
++    const ext = s.extendToNow !== false;
+     const pts = drawLine(
+       ctx,
+       layout,
+@@ -1612,7 +1617,11 @@ function drawMultiFrame(ctx, layout, opts) {
+       scrubX,
+       opts.scrubAmount,
+       reveal,
+-      opts.now_ms
++      opts.now_ms,
++      1,
++      true,
++      1,
++      ext
+     );
+     ctx.restore();
+     if (pts && pts.length > 0) {
+@@ -2584,7 +2593,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+           data: s.data.slice(),
+           value: s.value,
+           palette: s.palette,
+-          label: s.label
++          label: s.label,
++          extendToNow: s.extendToNow !== false
+         }));
+       }
+       if (hasData && !cfg.isMultiSeries) lastMultiSeriesRef.current = [];
+@@ -3154,7 +3164,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+             if (range.min < globalMin) globalMin = range.min;
+             if (range.max > globalMax) globalMax = range.max;
+           }
+-          seriesEntries.push({ visible, smoothValue: sv, palette: s.palette, label: s.label, alpha });
++          seriesEntries.push({ visible, smoothValue: sv, palette: s.palette, label: s.label, alpha, extendToNow: s.extendToNow !== false });
+         }
+       }
+       if (seriesEntries.length === 0) {
+@@ -3176,7 +3186,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+         rafRef.current = requestAnimationFrame(draw);
+         return;
+       }
+-      const computedRange = { min: isFinite(globalMin) ? globalMin : 0, max: isFinite(globalMax) ? globalMax : 1 };
++      const computedRange = cfg.yDomain ? { min: cfg.yDomain.min, max: cfg.yDomain.max } : { min: isFinite(globalMin) ? globalMin : 0, max: isFinite(globalMax) ? globalMax : 1 };
+       const adaptiveSpeed = cfg.lerpSpeed + ADAPTIVE_SPEED_BOOST * 0.5;
+       const rangeResult = updateRange(
+         computedRange,
+@@ -3532,6 +3542,8 @@ function Liveline({
+   onModeChange,
+   onSeriesToggle,
+   seriesToggleCompact = false,
++  yDomain,
++  showSeriesChips = true,
+   lineWidth,
+   className,
+   style
+@@ -3567,7 +3579,8 @@ function Liveline({
+       data: s.data,
+       value: s.value,
+       palette: seriesPalettes.get(s.id) ?? resolveTheme(s.color || SERIES_COLORS[i % SERIES_COLORS.length], theme),
+-      label: s.label
++      label: s.label,
++      extendToNow: s.extendToNow !== false
+     }));
+   }, [seriesProp, seriesPalettes, theme]);
+   const showMomentum = momentum !== false;
+@@ -3668,7 +3681,8 @@ function Liveline({
+     lineValue,
+     multiSeries,
+     isMultiSeries,
+-    hiddenSeriesIds: hiddenSeries
++    hiddenSeriesIds: hiddenSeries,
++    yDomain
+   });
+   const cursorStyle = scrub ? cursor : "default";
+   const activeColor = isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)";
+@@ -3878,7 +3892,7 @@ function Liveline({
+           ]
+         }
+       ),
+-      showSeriesToggle && /* @__PURE__ */ jsx("div", { style: {
++      showSeriesToggle && showSeriesChips && /* @__PURE__ */ jsx("div", { style: {
+         display: "inline-flex",
+         gap: ws === "text" ? 4 : 2,
+         background: ws === "text" ? "transparent" : isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",

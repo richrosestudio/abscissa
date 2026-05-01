@@ -1,0 +1,71 @@
+.chart-wrapper {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.liveline-container {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+  transition: opacity 0.4s ease;
+}
+
+.liveline-container--loading {
+  opacity: 0.45;
+}
+
+/* Market session zone overlay — aligned to Liveline's internal chart area */
+.market-zones-layer {
+  position: absolute;
+  /* Match Liveline's confirmed default padding: top 12, right 54, bottom 28, left 12 */
+  top: 12px;
+  bottom: 28px;
+  left: 12px;
+  right: 54px;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.market-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transition: left 0.5s ease, width 0.5s ease, opacity 0.5s ease;
+}
+
+/* Zero-line cross glow overlay — thin horizontal line at chart midpoint */
+.ref-line-glow {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 8px 3px rgba(255, 255, 255, 0.3);
+  transition: opacity 0.15s ease;
+}
+
+[data-theme="light"] .ref-line-glow {
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 8px 3px rgba(0, 0, 0, 0.15);
+}
+
+.ref-line-glow.active {
+  opacity: 1;
+  animation: glow-pulse 1.2s ease forwards;
+}
+
+@keyframes glow-pulse {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  60%  { opacity: 0.6; }
+  100% { opacity: 0; }
+}

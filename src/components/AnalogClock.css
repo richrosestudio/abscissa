@@ -1,0 +1,102 @@
+.analog-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: filter 0.4s ease, opacity 0.35s ease, box-shadow 0.35s ease;
+  border-radius: 4px;
+  padding: 4px 6px;
+  outline: none;
+}
+
+/* open/closed base states — override opacity only when no selection is active */
+.analog-clock.closed {
+  filter: saturate(0);
+  opacity: 0.4;
+}
+
+.analog-clock.open {
+  filter: none;
+  opacity: 1;
+}
+
+/* selection states come last so they win the specificity tie */
+.analog-clock.selected {
+  opacity: 1 !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+[data-theme="light"] .analog-clock.selected {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.analog-clock.unselected {
+  opacity: 0.25 !important;
+}
+
+.clock-face {
+  overflow: visible;
+  width: 50px !important;
+  height: 50px !important;
+}
+
+.clock-rim {
+  fill: none;
+  stroke: var(--clock-rim);
+  stroke-width: 1;
+}
+
+.clock-tick {
+  stroke: var(--clock-rim);
+  stroke-width: 0.7;
+  stroke-linecap: round;
+}
+
+.clock-hand {
+  stroke-linecap: round;
+}
+
+.hour-hand {
+  stroke: var(--clock-stroke);
+  stroke-width: 1.8;
+}
+
+.minute-hand {
+  stroke: var(--clock-stroke);
+  stroke-width: 1.2;
+}
+
+.second-hand {
+  stroke: #ef4444;
+  stroke-width: 0.7;
+  opacity: 0.85;
+}
+
+[data-theme="light"] .second-hand {
+  stroke: #dc2626;
+}
+
+
+.clock-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 1;
+}
+
+.clock-digital {
+  font-family: 'SF Mono', 'Fira Mono', 'Consolas', monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.clock-city {
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}

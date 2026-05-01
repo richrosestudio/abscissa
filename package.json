@@ -1,0 +1,30 @@
+{
+  "name": "abscissa",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:api": "vercel dev",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "postinstall": "patch-package"
+  },
+  "dependencies": {
+    "liveline": "latest",
+    "react": "^19.0.0",
+    "react-colorful": "^5.6.1",
+    "react-dom": "^19.0.0",
+    "yahoo-finance2": "^3.14.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vercel/node": "^5.7.13",
+    "@vitejs/plugin-react": "^4.3.4",
+    "patch-package": "^8.0.0",
+    "typescript": "~5.7.2",
+    "vercel": "^52.2.1",
+    "vite": "^6.3.0"
+  }
+}

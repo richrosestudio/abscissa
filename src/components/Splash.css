@@ -1,0 +1,39 @@
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  opacity: 1;
+  transition: opacity 700ms ease;
+}
+
+.splash--out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-logo {
+  height: 42px;
+  width: auto;
+  display: block;
+  filter: var(--logo-filter);
+  animation: splash-breathe 2s ease-in-out infinite;
+}
+
+.splash-rule {
+  width: 80px;
+  height: 1px;
+  background: var(--border);
+  animation: splash-breathe 2s ease-in-out infinite;
+  animation-delay: 0.15s;
+}
+
+@keyframes splash-breathe {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1;   }
+}

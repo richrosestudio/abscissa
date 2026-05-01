@@ -1,0 +1,86 @@
+/* ─── Reset ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+body { overflow: hidden; }
+
+/* ─── Theme tokens ───────────────────────────────────────────── */
+:root, [data-theme="dark"] {
+  --bg:           #0a0a0f;
+  --bg-subtle:    #111118;
+  --border:       rgba(255,255,255,0.07);
+  --text:         rgba(255,255,255,0.88);
+  --text-muted:   rgba(255,255,255,0.35);
+  --text-dim:     rgba(255,255,255,0.18);
+  --input-bg:     rgba(255,255,255,0.05);
+  --input-border: rgba(255,255,255,0.12);
+  --swatch-shadow: rgba(0,0,0,0.6);
+  --header-bg:    rgba(10,10,15,0.95);
+  --strip-bg:     rgba(12,12,18,0.97);
+  --clock-stroke: rgba(255,255,255,0.6);
+  --clock-rim:    rgba(255,255,255,0.12);
+  --wordmark-color: rgba(255,255,255,0.9);
+  --hover-bg:     rgba(255,255,255,0.06);
+}
+
+[data-theme="light"] {
+  --bg:           #f8f8f6;
+  --bg-subtle:    #f0f0ee;
+  --border:       rgba(0,0,0,0.08);
+  --text:         rgba(0,0,0,0.85);
+  --text-muted:   rgba(0,0,0,0.4);
+  --text-dim:     rgba(0,0,0,0.2);
+  --input-bg:     rgba(0,0,0,0.04);
+  --input-border: rgba(0,0,0,0.14);
+  --swatch-shadow: rgba(0,0,0,0.2);
+  --header-bg:    rgba(248,248,246,0.97);
+  --strip-bg:     rgba(244,244,242,0.98);
+  --clock-stroke: rgba(0,0,0,0.55);
+  --clock-rim:    rgba(0,0,0,0.12);
+  --wordmark-color: rgba(0,0,0,0.85);
+  --hover-bg:     rgba(0,0,0,0.05);
+}
+
+/* ─── Layout ────────────────────────────────────────────────── */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  transition: opacity 0.6s ease;
+}
+
+.app[data-idle="true"] {
+  opacity: 0.9;
+}
+
+.main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Subtle banner shown when using mock/simulated data */
+.mock-banner {
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 3px 0;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.tse-context-hint {
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 2px 12px 4px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
