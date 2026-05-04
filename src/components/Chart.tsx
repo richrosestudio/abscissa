@@ -37,6 +37,10 @@ interface Props {
   focusedId: string | null
   theme: Theme
   onHoverTime?: (time: number | null) => void
+  /** Toggle line focus (same behaviour as bottom-strip chip). */
+  onFocusLine?: (id: string) => void
+  /** Clear focus when the user clicks the plot without hitting a line. */
+  onClearLineFocus?: () => void
   selectedExchange?: Exchange | null
   timeRange?: TimeRange
   loading?: boolean
@@ -266,7 +270,80 @@ function mergeIntervals(intervals: { start: number; end: number }[]) {
   return merged
 }
 
+/** Liveline default padding when `grid` is on and no `padding` override. */
+const LIVELINE_PAD = { top: 12, left: 12, bottom: 28, right: 54 } as const
+const LINE_HIT_MAX_DIST_PX = 16
+const LINE_HIT_DRAG_THRESHOLD_PX = 6
 
+function interpolatedValueAtTime(points: LivelinePoint[], t: number): number | null {
+  if (points.length === 0) return null
+  const sorted =
+    points.length < 2 || points[0].time <= points[1].time ? points : [...points].sort((a, b) => a.time - b.time)
+  if (t <= sorted[0].time) return sorted[0].value
+  const lastPt = sorted[sorted.length - 1]
+  if (t >= lastPt.time) return lastPt.value
+  let i = 0
+  while (i < sorted.length - 1 && sorted[i + 1].time < t) i++
+  const a = sorted[i]
+  const b = sorted[i + 1]
+  if (!b || b.time === a.time) return a.value
+  const u = (t - a.time) / (b.time - a.time)
+  return a.value + u * (b.value - a.value)
+}
+
+interface LinePickContext {
+  plotSeries: LivelineSeries[]
+  leftEdge: number
+  rightEdge: number
+  labelReserve: number
+  minVal: number
+  maxVal: number
+  onFocusLine?: (id: string) => void
+}
+
+function pickSeriesIdAtClientPixel(
+  clientX: number,
+  clientY: number,
+  rect: DOMRectReadOnly,
+  ctx: LinePickContext,
+): string | null {
+  const pad = LIVELINE_PAD
+  const w = rect.width
+  const h = rect.height
+  const chartW = w - pad.left - pad.right - ctx.labelReserve
+  const chartH = h - pad.top - pad.bottom
+  if (chartW <= 1 || chartH <= 1) return null
+
+  const x = clientX - rect.left
+  const y = clientY - rect.top
+  if (x < pad.left || x > pad.left + chartW) return null
+  if (y < pad.top || y > h - pad.bottom) return null
+
+  const { leftEdge, rightEdge, minVal, maxVal } = ctx
+  const spanT = rightEdge - leftEdge
+  if (!(spanT > 0)) return null
+  const valRange = Math.max(1e-9, maxVal - minVal)
+  const t = leftEdge + ((x - pad.left) / chartW) * spanT
+
+  let bestId: string | null = null
+  let bestDist = LINE_HIT_MAX_DIST_PX + 1
+
+  for (const s of ctx.plotSeries) {
+    if (s.data.length < 2) continue
+    const visible = s.data.filter(p => p.time >= leftEdge - 2 && p.time <= rightEdge)
+    if (visible.length < 2) continue
+    const val = interpolatedValueAtTime(visible, t)
+    if (val == null) continue
+    const yLine = pad.top + (1 - (val - minVal) / valRange) * chartH
+    const d = Math.abs(y - yLine)
+    if (d < bestDist) {
+      bestDist = d
+      bestId = s.id
+    }
+  }
+
+  return bestId
+}
 /**
  * Session shading ends at liveTimeSec (not in Liveline's future buffer strip).
  * plotRightEdge is the chart nominal right edge (now + buffer); percentages still
@@ -362,10 +439,39 @@ function computeSessionMarkers(
 }
 
 const Chart = forwardRef<ChartRef, Props>(function Chart(
-  { holdings, seriesData, focusedId, theme, onHoverTime, selectedExchange, timeRange = '1D', loading = false, onCanResetChange },
+  {
+    holdings,
+    seriesData,
+    focusedId,
+    theme,
+    onHoverTime,
+    onFocusLine,
+    onClearLineFocus,
+    selectedExchange,
+    timeRange = '1D',
+    loading = false,
+    onCanResetChange,
+  },
   ref,
 ) {
+  const linePickRef = useRef<LinePickContext | null>(null)
+  const pointerGestureStartRef = useRef({ x: 0, y: 0 })
+  const dragExceededThresholdRef = useRef(false)
   const prevPcts = useRef<Record<string, number>>({})
+  const focusedIdRef = useRef<string | null>(null)
+  const onClearLineFocusRef = useRef<(() => void) | undefined>(undefined)
+  focusedIdRef.current = focusedId
+  onClearLineFocusRef.current = onClearLineFocus
+
+  const [chartHintDismissed, setChartHintDismissed] = useState(
+    () =>
+      typeof sessionStorage !== 'undefined' && sessionStorage.getItem('abx_chart_hint_v1') === '1',
+  )
+
+  const dismissChartHint = useCallback(() => {
+    sessionStorage.setItem('abx_chart_hint_v1', '1')
+    setChartHintDismissed(true)
+  }, [])
   const [refLineGlow, setRefLineGlow] = useState(false)
   const [clockTick, setClockTick] = useState(() => Date.now())
   /** Cap zone shading at live time; rolling window still uses minute clockTick */
@@ -481,13 +587,11 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
       if (e.button !== 0) return
       const rect = el.getBoundingClientRect()
       if (e.clientX > rect.right - 58) return  // Y-axis strip — handled by its own overlay
+      pointerGestureStartRef.current = { x: e.clientX, y: e.clientY }
+      dragExceededThresholdRef.current = false
       e.preventDefault()
       el.setPointerCapture(e.pointerId)
       isDraggingRef.current = true
-      dragStartXRef.current = e.clientX
-      dragStartYChartRef.current = e.clientY
-      dragStartPanRef.current = panOffsetMsRef.current
-      dragStartDomainMainRef.current = yDomainOverrideRef.current ?? yDomainRef.current
       el.classList.add('liveline-container--dragging')
     }
 
@@ -496,7 +600,18 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
       const rect = el.getBoundingClientRect()
       const plotWidth = rect.width - 58  // exclude Y-axis strip
 
-      // Horizontal: pan time — drag left scrolls back in time
+      const sx = pointerGestureStartRef.current.x
+      const sy = pointerGestureStartRef.current.y
+      const dist = Math.hypot(e.clientX - sx, e.clientY - sy)
+      if (!dragExceededThresholdRef.current) {
+        if (dist < LINE_HIT_DRAG_THRESHOLD_PX) return
+        dragExceededThresholdRef.current = true
+        dragStartXRef.current = sx
+        dragStartYChartRef.current = sy
+        dragStartPanRef.current = panOffsetMsRef.current
+        dragStartDomainMainRef.current = yDomainOverrideRef.current ?? yDomainRef.current
+      }
+
       const deltaXPx = e.clientX - dragStartXRef.current
       const secsPerPx = effectiveWindowSecsRef.current / plotWidth
       const rawPan = dragStartPanRef.current - deltaXPx * secsPerPx * 1000
@@ -505,7 +620,6 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
       setPanOffsetMs(newPan)
       panOffsetMsRef.current = newPan
 
-      // Vertical: translate Y domain — drag up shifts prices up, drag down shifts down
       const deltaYPx = e.clientY - dragStartYChartRef.current
       const { min, max } = dragStartDomainMainRef.current
       const span = max - min
@@ -516,13 +630,27 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
 
     const onPointerUp = (e: PointerEvent) => {
       if (!el.hasPointerCapture(e.pointerId)) return
+      const wasClick = isDraggingRef.current && !dragExceededThresholdRef.current
       el.releasePointerCapture(e.pointerId)
       isDraggingRef.current = false
       el.classList.remove('liveline-container--dragging')
-      // Snap back to live edge if pan is negligibly small
       if (panOffsetMsRef.current < 2000) {
         setPanOffsetMs(0)
         panOffsetMsRef.current = 0
+      }
+      if (wasClick && e.button === 0) {
+        const rect = el.getBoundingClientRect()
+        if (e.clientX <= rect.right - 58) {
+          const ctx = linePickRef.current
+          const id = ctx
+            ? pickSeriesIdAtClientPixel(e.clientX, e.clientY, rect, ctx)
+            : null
+          if (id && ctx?.onFocusLine) {
+            ctx.onFocusLine(id)
+          } else if (!id && focusedIdRef.current != null) {
+            onClearLineFocusRef.current?.()
+          }
+        }
       }
     }
 
@@ -614,15 +742,16 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
           ? thickness
           : isFocused ? Math.min(4, thickness + 1) : 1
 
-        const gradientStops = !isDimmedByFocus && h.gradientColors?.length
-          ? [h.color, ...h.gradientColors]
-          : undefined
+        // On 1D, always use solid color + sessions so every line fades outside its exchange hours.
+        // Liveline's session-aware renderer (renderCurveWithSessions) uses a plain strokeStyle
+        // and cannot combine with gradientStops; strip chip swatches read h.gradientColors directly.
+        const gradientStops =
+          timeRange !== '1D' && !isDimmedByFocus && h.gradientColors?.length
+            ? [h.color, ...h.gradientColors]
+            : undefined
 
-        // liveline's session-aware renderer (renderCurveWithSessions) uses a plain
-        // strokeStyle string and ignores gradientStops entirely. Skip sessions for
-        // gradient lines so renderCurve handles the stroke instead.
         let sessions: { start: number; end: number }[] | undefined
-        if (!gradientStops && timeRange === '1D' && zoneEnd > leftEdge) {
+        if (timeRange === '1D' && zoneEnd > leftEdge) {
           sessions = mergeIntervals(getOpenIntervalsForExchange(h.exchange, leftEdge, zoneEnd))
         }
 
@@ -773,9 +902,34 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
     onCanResetChange?.(can)
   }, [holdings.length, userWindowSecs, yDomainOverride, panOffsetMs, onCanResetChange])
 
+  linePickRef.current = {
+    plotSeries: panOffsetMs > 0 ? series.map(s => ({ ...s, extendToNow: false })) : series,
+    leftEdge: visibleWindow.leftEdge,
+    rightEdge: visibleWindow.rightEdge,
+    labelReserve,
+    minVal: (yDomainOverride ?? yDomain).min,
+    maxVal: (yDomainOverride ?? yDomain).max,
+    onFocusLine,
+  }
+
   return (
     <div className="chart-wrapper" onDoubleClick={handleDoubleClick}>
       <div className={`ref-line-glow ${refLineGlow ? 'active' : ''}`} />
+      {!chartHintDismissed && !isEmpty && hasData && isIntraday && (
+        <div className="chart-hint" role="note">
+          <span className="chart-hint-text">
+            Drag to pan time · wheel zooms · double-click resets
+          </span>
+          <button
+            type="button"
+            className="chart-hint-close"
+            onClick={dismissChartHint}
+            aria-label="Dismiss chart tips"
+          >
+            ×
+          </button>
+        </div>
+      )}
       {isEmpty && (
         <div className="chart-empty-state" aria-live="polite">
           <p className="chart-empty-state__title">No tickers yet</p>

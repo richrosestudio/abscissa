@@ -78,6 +78,21 @@ body { overflow: hidden; }
   flex-shrink: 0;
 }
 
+.mock-banner--warn {
+  text-transform: none;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app[data-idle="true"] {
+    opacity: 1;
+  }
+  .app {
+    transition: none;
+  }
+}
+
 .tse-context-hint {
   text-align: center;
   font-size: 10px;

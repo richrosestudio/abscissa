@@ -108,3 +108,32 @@
   width: 14px;
   height: 14px;
 }
+
+@media (max-width: 639px) {
+  .trp {
+    left: 8px;
+    right: 8px;
+    bottom: 58px;
+    max-width: calc(100vw - 16px);
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    gap: 4px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+
+  .trp-btn {
+    flex-shrink: 0;
+    padding: 6px 9px;
+    font-size: 11px;
+    scroll-snap-align: start;
+  }
+
+  .trp-btn--live {
+    padding: 6px 10px;
+  }
+
+  .trp-btn--reset {
+    padding: 6px 8px;
+  }
+}

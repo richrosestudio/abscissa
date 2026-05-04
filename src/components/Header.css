@@ -15,7 +15,7 @@
 }
 
 .header-wordmark {
-  height: 42px;
+  height: calc(42px * 1.15);
   width: auto;
   display: block;
   flex-shrink: 0;

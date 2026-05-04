@@ -376,9 +376,10 @@ export default function BottomStrip({
             <div
               key={h.id}
               role="listitem"
-              className={`strip-chip${isFocused ? ' focused' : ''}${isDimmed ? ' dimmed' : ''}`}
+              className={`strip-chip${isFocused ? ' focused' : ''}${isDimmed ? ' dimmed' : ''}${errMsg ? ' strip-chip--warn' : ''}`}
               onClick={() => onFocus(h.id)}
-              title={errMsg ? `Data error: ${errMsg}` : undefined}
+              title={errMsg ? `Data issue: ${errMsg}` : undefined}
+              aria-invalid={errMsg ? true : undefined}
             >
               {/* Color swatch — opens line appearance picker */}
               <button
@@ -399,6 +400,12 @@ export default function BottomStrip({
                 aria-expanded={stylePickerId === h.id}
                 title="Line & colour"
               />
+
+              {errMsg && (
+                <span className="chip-data-warning" title={errMsg} aria-label={`Data issue: ${errMsg}`}>
+                  !
+                </span>
+              )}
 
               <span className="chip-ticker">{h.ticker}</span>
               <span className="chip-exch">{h.exchange}</span>

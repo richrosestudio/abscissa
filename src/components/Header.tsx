@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { Exchange, Theme } from '../types'
+import { isExchangeOpen } from '../utils/exchange'
 import AnalogClock from './AnalogClock'
 import FearGreed from './FearGreed'
 import './Header.css'
@@ -12,10 +13,10 @@ interface Props {
   onSelectExchange?: (exchange: Exchange) => void
 }
 
-const CLOCKS: { city: string; tz: string; exchange: Exchange; offset: () => string; isOpen: () => boolean }[] = [
-  { city: 'London',   tz: 'Europe/London',   exchange: 'LSE', offset: () => tzOffset('Europe/London'),   isOpen: () => isLSEOpen() },
-  { city: 'New York', tz: 'America/New_York', exchange: 'US',  offset: () => tzOffset('America/New_York'), isOpen: () => isUSOpen() },
-  { city: 'Tokyo',    tz: 'Asia/Tokyo',       exchange: 'TSE', offset: () => tzOffset('Asia/Tokyo'),       isOpen: () => isTSEOpen() },
+const CLOCKS: { city: string; tz: string; exchange: Exchange; offset: () => string }[] = [
+  { city: 'London',   tz: 'Europe/London',   exchange: 'LSE', offset: () => tzOffset('Europe/London') },
+  { city: 'New York', tz: 'America/New_York', exchange: 'US',  offset: () => tzOffset('America/New_York') },
+  { city: 'Tokyo',    tz: 'Asia/Tokyo',       exchange: 'TSE', offset: () => tzOffset('Asia/Tokyo') },
 ]
 
 function tzOffset(tz: string): string {
@@ -25,34 +26,6 @@ function tzOffset(tz: string): string {
     timeZoneName: 'shortOffset',
   }).formatToParts(now)
   return parts.find(p => p.type === 'timeZoneName')?.value ?? ''
-}
-
-function getLondonMins(): number {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(new Date())
-  const h = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0')
-  const m = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0')
-  return h * 60 + m
-}
-
-function isLSEOpen(): boolean {
-  const m = getLondonMins(); return m >= 480 && m < 990
-}
-
-function isUSOpen(): boolean {
-  const m = getLondonMins(); return m >= 870 && m < 1260
-}
-
-function isTSEOpen(): boolean {
-  const now = new Date()
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(now)
-  const h = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0')
-  const m = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0')
-  const mins = h * 60 + m
-  return mins >= 540 && mins < 900
 }
 
 function IconMoon() {
@@ -111,7 +84,10 @@ export default function Header({ theme, onToggleTheme, hoveredTime, selectedExch
         className="header-wordmark"
       />
 
-      <div className="header-clocks">
+      <div
+        className="header-clocks"
+        title="Click a city to show only that exchange’s session shading; click again to show all venues in your list."
+      >
         {CLOCKS.map(c => {
           const isSelected = selectedExchange === c.exchange
           const isUnselected = selectedExchange !== null && !isSelected
@@ -121,7 +97,7 @@ export default function Header({ theme, onToggleTheme, hoveredTime, selectedExch
               city={c.city}
               timezone={c.tz}
               offsetLabel={c.offset()}
-              isOpen={c.isOpen()}
+              isOpen={isExchangeOpen(c.exchange)}
               scrubTime={hoveredTime}
               selected={isSelected}
               unselected={isUnselected}

@@ -17,7 +17,7 @@ export default function App() {
   const [holdings, setHoldings] = useState<Holding[]>(() => loadHoldings())
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [hoveredTime, setHoveredTime] = useState<number | null>(null)
-  const [selectedExchange, setSelectedExchange] = useState<Exchange | null>('US')
+  const [selectedExchange, setSelectedExchange] = useState<Exchange | null>(null)
   const [selectedRange, setSelectedRange] = useState<TimeRange>('1D')
   const chartRef = useRef<ChartRef | null>(null)
   const [chartCanReset, setChartCanReset] = useState(false)
@@ -33,19 +33,25 @@ export default function App() {
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [idle, setIdle] = useState(false)
 
-  const { data: seriesData, usingMock, loading, perTickerErrors } = useIntradayData(holdings, selectedRange)
+  const { data: seriesData, usingMock, loading, perTickerErrors, simulatedReason } = useIntradayData(holdings, selectedRange)
 
   // Persist
   useEffect(() => { saveTheme(theme) }, [theme])
   useEffect(() => { saveHoldings(holdings) }, [holdings])
   useEffect(() => { savePctFootnoteHidden(pctFootnoteHidden) }, [pctFootnoteHidden])
 
-  // Apply theme class to root
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
-  // Cycle tab title through each holding every 3 s; favicon stays as portfolio aggregate
+  // Match Safari / mobile toolbar tint to active theme
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (!meta) return
+    meta.setAttribute('content', theme === 'dark' ? '#0a0a0f' : '#f8f8f6')
+  }, [theme])
+
+  // Cycle tab title through each holding when the tab is visible (slower cadence to reduce noise)
   const cycleIdx = useRef(0)
 
   useEffect(() => {
@@ -63,9 +69,10 @@ export default function App() {
 
     updateTitle()
     const id = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
       cycleIdx.current = (cycleIdx.current + 1) % holdings.length
       updateTitle()
-    }, 3000)
+    }, 8000)
 
     return () => clearInterval(id)
   }, [holdings, seriesData])
@@ -129,9 +136,19 @@ export default function App() {
         selectedExchange={selectedExchange}
         onSelectExchange={toggleExchange}
       />
-      {usingMock && (
-        <div className="mock-banner">
-          Markets closed — showing simulated data
+      {usingMock && simulatedReason === 'after_hours' && (
+        <div role="status" aria-live="polite" className="mock-banner">
+          Markets closed — showing simulated intraday
+        </div>
+      )}
+      {usingMock && simulatedReason === 'offline' && (
+        <div role="status" aria-live="polite" className="mock-banner mock-banner--warn">
+          Can&apos;t reach market data — showing simulated series. Check your connection or try refreshing.
+        </div>
+      )}
+      {usingMock && simulatedReason === 'historical_demo' && (
+        <div role="status" aria-live="polite" className="mock-banner mock-banner--warn">
+          Historical data unavailable — showing demo series for this range.
         </div>
       )}
       {selectedExchange === 'TSE' && holdings.every(h => h.exchange !== 'TSE') && (
@@ -147,6 +164,8 @@ export default function App() {
           focusedId={focusedId}
           theme={theme}
           onHoverTime={setHoveredTime}
+          onFocusLine={toggleFocus}
+          onClearLineFocus={() => setFocusedId(null)}
           selectedExchange={selectedExchange}
           timeRange={selectedRange}
           loading={loading}

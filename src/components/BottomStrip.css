@@ -54,6 +54,29 @@
 }
 .strip-chips::-webkit-scrollbar { display: none; }
 
+.strip-chip.strip-chip--warn {
+  border-color: color-mix(in srgb, #f97316 35%, transparent);
+}
+
+.chip-data-warning {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  background: #ea580c;
+  cursor: help;
+}
+
+[data-theme="light"] .chip-data-warning {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
 /* Individual chip */
 .strip-chip {
   display: flex;
@@ -328,4 +351,47 @@
 @keyframes popup-in {
   from { opacity: 0; transform: translateY(6px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Narrow viewports / touch ─────────────────────────────── */
+@media (max-width: 639px) {
+  .strip {
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  .strip-chips {
+    gap: 4px;
+    padding: 2px 0;
+    scroll-padding-inline: 4px;
+  }
+
+  /* Larger hit target than desktop-only hover affordance */
+  .chip-remove {
+    min-width: 32px;
+    min-height: 32px;
+    margin: -6px -4px -6px 0;
+    padding: 0 6px;
+    display: grid;
+    place-items: center;
+    opacity: 0.45;
+  }
+
+  .strip-chip:hover .chip-remove,
+  .strip-chip:focus-within .chip-remove,
+  .strip-chip:active .chip-remove {
+    opacity: 1;
+  }
+
+  .strip-reset {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+  }
+
+  .strip-input {
+    width: 110px;
+    min-height: 36px;
+    padding: 6px 26px 6px 10px;
+  }
 }

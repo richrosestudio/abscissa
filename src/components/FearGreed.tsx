@@ -57,10 +57,10 @@ export default function FearGreed({ leadingSlot }: Props) {
   const title = rating ? `Fear & Greed: ${rating} — click to open CNN` : 'Fear & Greed Index — click to open CNN'
 
   return (
-    <div className="fg-widget">
+    <div className={`fg-widget${error ? ' fg-widget--error' : ''}`}>
       {leadingSlot ? <span className="fg-toggle-slot">{leadingSlot}</span> : null}
       <a
-        className="fg-bar-anchor"
+        className="fg-meter-anchor"
         href={href}
         target="_blank"
         rel="noopener noreferrer"
@@ -75,21 +75,15 @@ export default function FearGreed({ leadingSlot }: Props) {
             )}
           </div>
         </div>
-      </a>
-      <a
-        className="fg-readout-anchor"
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={title}
-      >
-        <div className="fg-readout">
+        <div className="fg-readout-track">
           {error ? (
-            <span className="fg-score fg-err">—</span>
+            <span className="fg-score fg-err fg-score--centered">—</span>
           ) : score !== null ? (
-            <span className="fg-score">{score}</span>
+            <span className="fg-score fg-score--at-needle" style={{ left: pct }}>
+              {score}
+            </span>
           ) : (
-            <span className="fg-score fg-loading">…</span>
+            <span className="fg-score fg-loading fg-score--centered">…</span>
           )}
         </div>
       </a>

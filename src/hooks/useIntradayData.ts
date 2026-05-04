@@ -131,12 +131,16 @@ function mergeHistoricalFromApi(
   return { nextData, perTickerErrors }
 }
 
+export type SimulatedDataReason = 'after_hours' | 'offline' | 'historical_demo'
+
 interface FetchState {
   data: Record<string, SeriesData>
   loading: boolean
   error: string | null
   lastFetchAt: number | null
   usingMock: boolean
+  /** When `usingMock`, why the app is showing simulated data (banner copy). */
+  simulatedReason: SimulatedDataReason | null
   /** Set when the last fetch returned an error or empty series for that holding id */
   perTickerErrors: Record<string, string>
 }
@@ -148,6 +152,7 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
     error: null,
     lastFetchAt: null,
     usingMock: false,
+    simulatedReason: null,
     perTickerErrors: {},
   })
 
@@ -159,7 +164,14 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
 
   const fetchData = useCallback(async (signal: AbortSignal) => {
     if (holdings.length === 0) {
-      setState(s => ({ ...s, loading: false, data: {}, perTickerErrors: {} }))
+      setState(s => ({
+        ...s,
+        loading: false,
+        data: {},
+        perTickerErrors: {},
+        usingMock: false,
+        simulatedReason: null,
+      }))
       return
     }
 
@@ -185,6 +197,7 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
         error: null,
         lastFetchAt: Date.now(),
         usingMock: false,
+        simulatedReason: null,
       }))
     } catch (err) {
       if (signal.aborted) return
@@ -215,12 +228,14 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
           }
         }
         const hasAny = Object.keys(merged).length > 0
+        const noPriorData = Object.keys(s.data).length === 0
         return {
           ...s,
           loading: false,
           error: err instanceof Error ? err.message : String(err),
           data: hasAny ? merged : mockEntries,
-          usingMock: Object.keys(s.data).length === 0,
+          usingMock: noPriorData,
+          simulatedReason: noPriorData ? 'offline' : null,
           perTickerErrors: {},
         }
       })
@@ -228,7 +243,7 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
   }, [holdings])
 
   // Seed mock data from the deterministic PRNG (called once per session or on holdings change)
-  const initMock = useCallback((signal: AbortSignal) => {
+  const initMock = useCallback((signal: AbortSignal, reason: SimulatedDataReason = 'after_hours') => {
     if (signal.aborted) return
     const mockRaw = getMockSeriesData(holdings)
     const mockData: Record<string, SeriesData> = {}
@@ -252,6 +267,7 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
       loading: false,
       error: null,
       usingMock: true,
+      simulatedReason: reason,
       perTickerErrors: {},
     }))
   }, [holdings])
@@ -277,7 +293,13 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
     // do not wipe real data.
     if (holdings.length > 0 && Object.keys(next).length === 0) return
     mockDataRef.current = next
-    setState(s => ({ ...s, data: next, usingMock: true, perTickerErrors: {} }))
+    setState(s => ({
+      ...s,
+      data: next,
+      usingMock: true,
+      simulatedReason: s.simulatedReason,
+      perTickerErrors: {},
+    }))
   }, [holdings])
 
   // ── Historical fetch (non-1D ranges) ──────────────────────────────────────
@@ -309,6 +331,7 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
         error: null,
         lastFetchAt: Date.now(),
         usingMock: false,
+        simulatedReason: null,
       }))
     } catch {
       if (signal.aborted) return
@@ -319,11 +342,13 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
         const d = mockRaw[h.id]
         if (d) mockData[h.id] = { id: h.id, points: d.points, latestPct: d.latestPct, openPrice: d.basePrice, currency: d.currency }
       }
+      const useMock = Object.keys(mockData).length > 0
       setState(s => ({
         ...s,
         loading: false,
-        data: Object.keys(mockData).length > 0 ? mockData : s.data,
-        usingMock: Object.keys(mockData).length > 0,
+        data: useMock ? mockData : s.data,
+        usingMock: useMock,
+        simulatedReason: useMock ? 'historical_demo' : null,
         perTickerErrors: {},
       }))
     }
@@ -349,6 +374,7 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
         error: null,
         lastFetchAt: null,
         usingMock: false,
+        simulatedReason: null,
         perTickerErrors: {},
       })
       return () => {
@@ -380,7 +406,8 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
         if (signal.aborted) return
         setState(s => {
           if (Object.keys(s.data).length === 0 || s.usingMock) {
-            initMock(signal)
+            const reason: SimulatedDataReason = s.simulatedReason === 'offline' ? 'offline' : 'after_hours'
+            initMock(signal, reason)
             pollTimer.current = setInterval(tickMock, MOCK_TICK_MS)
           }
           return s
@@ -401,7 +428,7 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
         fetchData(signal)
       } else {
         if (pollTimer.current) clearInterval(pollTimer.current)
-        initMock(signal)
+        initMock(signal, 'after_hours')
         pollTimer.current = setInterval(tickMock, MOCK_TICK_MS)
       }
     }, POLL_INTERVAL_MS)
