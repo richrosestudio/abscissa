@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
-import type { Holding, SeriesData, Theme, TimeRange } from '../types'
+import type { Holding, HoldingSearchMeta, SeriesData, Theme, TimeRange } from '../types'
 import { pctToColor } from '../utils/colors'
+import { nearestPct, formatPrice } from '../utils/quoteDisplay'
 import LineStylePicker from './LineStylePicker'
 import Portal from './Portal'
 import './BottomStrip.css'
@@ -14,37 +15,16 @@ interface Props {
   onFocus: (id: string) => void
   onResetFocus?: () => void
   onColorChange: (id: string, color: string) => void
+  onDotColorChange: (id: string, color: string | undefined) => void
+  onLinearChange: (id: string, linear: boolean) => void
+  onOpacityChange: (id: string, opacity: number) => void
   onStyleChange: (id: string, patch: Partial<Pick<Holding, 'lineStyle' | 'lineThickness' | 'gradientColors'>>) => void
-  onAdd: (ticker: string) => void
+  onAdd: (ticker: string, meta?: HoldingSearchMeta) => void
   onRemove: (id: string) => void
   tickerErrors?: Record<string, string>
   timeRange: TimeRange
   pctFootnoteHidden: boolean
   onPctFootnoteHiddenChange: (hidden: boolean) => void
-}
-
-/** Binary-search for the nearest data point to `targetTime` */
-function nearestPct(points: SeriesData['points'], targetTime: number): number | null {
-  if (points.length === 0) return null
-  let lo = 0, hi = points.length - 1
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1
-    if (points[mid].time < targetTime) lo = mid + 1
-    else hi = mid
-  }
-  if (lo > 0 && Math.abs(points[lo - 1].time - targetTime) < Math.abs(points[lo].time - targetTime)) {
-    return points[lo - 1].value
-  }
-  return points[lo].value
-}
-
-function formatPrice(price: number, currency: string | undefined): string {
-  if (!currency) return price.toFixed(2)
-  if (currency === 'USD') return `$${price.toFixed(2)}`
-  if (currency === 'GBP') return `£${price.toFixed(2)}`
-  if (currency === 'GBp' || currency === 'GBX') return `${Math.round(price)}p`
-  if (currency === 'EUR') return `€${price.toFixed(2)}`
-  return price.toFixed(2)
 }
 
 interface AnimatedPct {
@@ -106,7 +86,7 @@ function pctFootnote(timeRange: TimeRange): { short: string; detail: string } {
 
 export default function BottomStrip({
   holdings, seriesData, focusedId, theme, hoveredTime,
-  onFocus, onResetFocus, onColorChange, onStyleChange, onAdd, onRemove,
+  onFocus, onResetFocus, onColorChange, onDotColorChange, onLinearChange, onOpacityChange, onStyleChange, onAdd, onRemove,
   tickerErrors = {},
   timeRange,
 }: Props) {
@@ -218,7 +198,7 @@ export default function BottomStrip({
   }
 
   const selectResult = (result: SearchResult) => {
-    onAdd(result.symbol)
+    onAdd(result.symbol, { companyName: result.name, venueDisplay: result.exchange })
     setAddInput('')
     setSearchResults([])
     setSearchOpen(false)
@@ -608,6 +588,9 @@ export default function BottomStrip({
                 key={h.id}
                 holding={h}
                 onPrimaryColorChange={c => onColorChange(stylePickerId, c)}
+                onDotColorChange={c => onDotColorChange(stylePickerId, c)}
+                onLinearChange={v => onLinearChange(stylePickerId, v)}
+                onOpacityChange={v => onOpacityChange(stylePickerId, v)}
                 onStyleChange={patch => onStyleChange(stylePickerId, patch)}
               />
             </div>

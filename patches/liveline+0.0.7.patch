@@ -1,5 +1,5 @@
 diff --git a/node_modules/liveline/dist/index.cjs b/node_modules/liveline/dist/index.cjs
-index 4709730..25980e4 100644
+index 4709730..9124718 100644
 --- a/node_modules/liveline/dist/index.cjs
 +++ b/node_modules/liveline/dist/index.cjs
 @@ -387,7 +387,7 @@ function blendColor(c1, c2, t) {
@@ -183,7 +183,22 @@ index 4709730..25980e4 100644
    }
    ctx.restore();
    if (!skipDashLine) {
-@@ -637,6 +732,9 @@ function drawCrosshair(ctx, layout, palette, hoverX, hoverValue, hoverTime, form
+@@ -532,11 +627,12 @@ function drawDot(ctx, x, y, palette, pulse = true, scrubAmount = 0, now_ms = per
+   ctx.globalAlpha = baseAlpha;
+   ctx.beginPath();
+   ctx.arc(x, y, 3.5, 0, Math.PI * 2);
++  const dotFill = palette.dotFlat ?? palette.line;
+   if (dim > 0.01) {
+-    const lineRgb = parseColorRgb(palette.line);
++    const lineRgb = parseColorRgb(dotFill);
+     ctx.fillStyle = lerpColor(lineRgb, outerRgb, dim);
+   } else {
+-    ctx.fillStyle = palette.line;
++    ctx.fillStyle = dotFill;
+   }
+   ctx.fill();
+ }
+@@ -637,6 +733,9 @@ function drawCrosshair(ctx, layout, palette, hoverX, hoverValue, hoverTime, form
    const valueText = formatValue(hoverValue);
    const timeText = formatTime(hoverTime);
    const separator = "  \xB7  ";
@@ -193,7 +208,7 @@ index 4709730..25980e4 100644
    ctx.save();
    ctx.globalAlpha = scrubOpacity;
    ctx.font = '400 13px "SF Mono", Menlo, monospace';
-@@ -659,7 +757,7 @@ function drawCrosshair(ctx, layout, palette, hoverX, hoverValue, hoverTime, form
+@@ -659,7 +758,7 @@ function drawCrosshair(ctx, layout, palette, hoverX, hoverValue, hoverTime, form
      ctx.strokeText(valueText, tx, ty);
      ctx.strokeText(separator + timeText, tx + valueW, ty);
    }
@@ -202,19 +217,74 @@ index 4709730..25980e4 100644
    ctx.fillText(valueText, tx, ty);
    ctx.fillStyle = palette.gridLabel;
    ctx.fillText(separator + timeText, tx + valueW, ty);
-@@ -704,7 +802,10 @@ function drawMultiCrosshair(ctx, layout, palette, hoverX, hoverTime, entries, fo
-     segments.push({ text: dotInline, color: e.color, isDot: true });
-     const label = e.label ? `${e.label} ` : "";
-     if (label) segments.push({ text: label, color: palette.gridLabel });
--    segments.push({ text: formatValue(e.value), color: palette.tooltipText });
-+    const vNum = Number(e.value);
-+    const valColor =
-+      vNum > 0 ? "#22c55e" : vNum < 0 ? "#ef4444" : palette.gridLabel;
-+    segments.push({ text: formatValue(e.value), color: valColor });
+@@ -688,66 +787,6 @@ function drawMultiCrosshair(ctx, layout, palette, hoverX, hoverTime, entries, fo
+       ctx.fill();
+     }
    }
-   let totalW = 0;
-   const segWidths = [];
-@@ -1351,12 +1452,15 @@ function drawLineModeCrosshair(ctx, layout, palette, hoverX, value, hoverTime, f
+-  if (scrubOpacity < 0.1 || layout.w < 300) return;
+-  ctx.save();
+-  ctx.globalAlpha = scrubOpacity;
+-  ctx.font = '400 13px "SF Mono", Menlo, monospace';
+-  ctx.textAlign = "left";
+-  const timeText = formatTime(hoverTime);
+-  const sep = "  \xB7  ";
+-  const dotInline = " ";
+-  const segments = [
+-    { text: timeText, color: palette.gridLabel }
+-  ];
+-  for (const e of entries) {
+-    segments.push({ text: sep, color: palette.gridLabel });
+-    segments.push({ text: dotInline, color: e.color, isDot: true });
+-    const label = e.label ? `${e.label} ` : "";
+-    if (label) segments.push({ text: label, color: palette.gridLabel });
+-    segments.push({ text: formatValue(e.value), color: palette.tooltipText });
+-  }
+-  let totalW = 0;
+-  const segWidths = [];
+-  for (const seg of segments) {
+-    const w = seg.isDot ? 12 : ctx.measureText(seg.text).width;
+-    segWidths.push(w);
+-    totalW += w;
+-  }
+-  let tx = hoverX - totalW / 2;
+-  const minX = pad.left + 4;
+-  const dotRightEdge = liveDotX != null ? liveDotX + 7 : layout.w - pad.right;
+-  const maxX = dotRightEdge - totalW;
+-  if (tx < minX) tx = minX;
+-  if (tx > maxX) tx = maxX;
+-  const ty = pad.top + (tooltipY ?? 14) + 10;
+-  if (tooltipOutline !== false) {
+-    ctx.strokeStyle = palette.tooltipBg;
+-    ctx.lineWidth = 3;
+-    ctx.lineJoin = "round";
+-    let ox2 = tx;
+-    for (let i = 0; i < segments.length; i++) {
+-      const seg = segments[i];
+-      if (!seg.isDot) {
+-        ctx.strokeText(seg.text, ox2, ty);
+-      }
+-      ox2 += segWidths[i];
+-    }
+-  }
+-  let ox = tx;
+-  for (let i = 0; i < segments.length; i++) {
+-    const seg = segments[i];
+-    if (seg.isDot) {
+-      ctx.beginPath();
+-      ctx.arc(ox + 4, ty - 4, 3.5, 0, Math.PI * 2);
+-      ctx.fillStyle = seg.color;
+-      ctx.fill();
+-    } else {
+-      ctx.fillStyle = seg.color;
+-      ctx.fillText(seg.text, ox, ty);
+-    }
+-    ox += segWidths[i];
+-  }
+-  ctx.restore();
+ }
+ 
+ // src/draw/referenceLine.ts
+@@ -1351,12 +1390,15 @@ function drawLineModeCrosshair(ctx, layout, palette, hoverX, value, hoverTime, f
    if (opacity < 0.1 || layout.w < 200) return;
    const val = formatValue(value);
    const time = formatTime(hoverTime);
@@ -231,7 +301,7 @@ index 4709730..25980e4 100644
      { text: "  \xB7  ", color: palette.gridLabel },
      { text: time, color: palette.gridLabel }
    ];
-@@ -1572,7 +1676,7 @@ function drawFrame(ctx, layout, palette, opts) {
+@@ -1572,7 +1614,7 @@ function drawFrame(ctx, layout, palette, opts) {
      const lastPt = pts[pts.length - 1];
      const distToLive = lastPt[0] - opts.hoverX;
      const fadeStart = Math.min(80, layout.chartW * 0.3);
@@ -240,7 +310,7 @@ index 4709730..25980e4 100644
      if (scrubOpacity > 0.01) {
        drawCrosshair(
          ctx,
-@@ -1627,6 +1731,9 @@ function drawMultiFrame(ctx, layout, opts) {
+@@ -1627,6 +1669,9 @@ function drawMultiFrame(ctx, layout, opts) {
      if (combinedAlpha < 0.01) continue;
      ctx.save();
      if (combinedAlpha < 1) ctx.globalAlpha = combinedAlpha;
@@ -250,7 +320,7 @@ index 4709730..25980e4 100644
      const pts = drawLine(
        ctx,
        layout,
-@@ -1639,7 +1746,13 @@ function drawMultiFrame(ctx, layout, opts) {
+@@ -1639,7 +1684,13 @@ function drawMultiFrame(ctx, layout, opts) {
        scrubX,
        opts.scrubAmount,
        reveal,
@@ -265,7 +335,29 @@ index 4709730..25980e4 100644
      );
      ctx.restore();
      if (pts && pts.length > 0) {
-@@ -1694,7 +1807,7 @@ function drawMultiFrame(ctx, layout, opts) {
+@@ -1661,17 +1712,18 @@ function drawMultiFrame(ctx, layout, opts) {
+     for (const entry of allPts) {
+       if (entry.alpha < 0.01) continue;
+       const lastPt = entry.pts[entry.pts.length - 1];
++      const dotFill = entry.palette.dotFlat ?? entry.palette.line;
+       ctx.save();
+       ctx.globalAlpha = dotAlpha * entry.alpha;
+       if (showPulse && entry.alpha > 0.5) {
+-        drawMultiDot(ctx, lastPt[0], lastPt[1], entry.palette.line, true, opts.now_ms, 3);
++        drawMultiDot(ctx, lastPt[0], lastPt[1], dotFill, true, opts.now_ms, 3);
+       } else {
+-        drawSimpleDot(ctx, lastPt[0], lastPt[1], entry.palette.line, 3);
++        drawSimpleDot(ctx, lastPt[0], lastPt[1], dotFill, 3);
+       }
+       if (entry.label) {
+         ctx.font = '600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
+         ctx.textAlign = "left";
+-        ctx.fillStyle = entry.palette.line;
++        ctx.fillStyle = dotFill;
+         ctx.fillText(entry.label, lastPt[0] + 6, lastPt[1] + 3.5);
+       }
+       ctx.restore();
+@@ -1694,7 +1746,7 @@ function drawMultiFrame(ctx, layout, opts) {
      }
      const distToLive = maxLiveDotX - opts.hoverX;
      const fadeStart = Math.min(80, layout.chartW * 0.3);
@@ -274,7 +366,7 @@ index 4709730..25980e4 100644
      if (scrubOpacity > 0.01) {
        drawMultiCrosshair(
          ctx,
-@@ -1990,8 +2103,8 @@ var VALUE_SNAP_THRESHOLD = 1e-3;
+@@ -1990,8 +2042,8 @@ var VALUE_SNAP_THRESHOLD = 1e-3;
  var ADAPTIVE_SPEED_BOOST = 0.2;
  var MOMENTUM_GREEN = [34, 197, 94];
  var MOMENTUM_RED = [239, 68, 68];
@@ -285,7 +377,7 @@ index 4709730..25980e4 100644
  var PAUSE_PROGRESS_SPEED = 0.12;
  var PAUSE_CATCHUP_SPEED = 0.08;
  var PAUSE_CATCHUP_SPEED_FAST = 0.22;
-@@ -2611,7 +2724,10 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -2611,7 +2663,10 @@ function useLivelineEngine(canvasRef, containerRef, config) {
            data: s.data.slice(),
            value: s.value,
            palette: s.palette,
@@ -297,7 +389,7 @@ index 4709730..25980e4 100644
          }));
        }
        if (hasData && !cfg.isMultiSeries) lastMultiSeriesRef.current = [];
-@@ -2660,8 +2776,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -2660,8 +2715,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
      }
      if (isCandle) {
        const candleBuffer = CANDLE_BUFFER_NO_BADGE;
@@ -308,7 +400,7 @@ index 4709730..25980e4 100644
        const rawLive = pausedCandlesRef.current ? pausedLiveRef.current ?? void 0 : cfg.liveCandle;
        let effectiveLineData = pausedLineDataRef.current ?? cfg.lineData;
        let effectiveLineValue = pausedLineValueRef.current ?? cfg.lineValue;
-@@ -3087,8 +3203,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -3087,8 +3142,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
        }
        const firstSeries = effectiveMultiSeries[0];
        const transition = windowTransitionRef.current;
@@ -319,7 +411,7 @@ index 4709730..25980e4 100644
        const smoothValues = /* @__PURE__ */ new Map();
        for (const s of effectiveMultiSeries) {
          let dv = displayValuesRef.current.get(s.id);
-@@ -3181,7 +3297,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -3181,7 +3236,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
              if (range.min < globalMin) globalMin = range.min;
              if (range.max > globalMax) globalMax = range.max;
            }
@@ -328,7 +420,7 @@ index 4709730..25980e4 100644
          }
        }
        if (seriesEntries.length === 0) {
-@@ -3203,7 +3319,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -3203,7 +3258,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
          rafRef.current = requestAnimationFrame(draw);
          return;
        }
@@ -337,7 +429,7 @@ index 4709730..25980e4 100644
        const adaptiveSpeed = cfg.lerpSpeed + ADAPTIVE_SPEED_BOOST * 0.5;
        const rangeResult = updateRange(
          computedRange,
-@@ -3332,8 +3448,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -3332,8 +3387,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
        const needsArrowRoom = cfg.showMomentum && cfg.showBadge;
        const buffer = needsArrowRoom ? Math.max(baseBuffer, 37 / Math.max(chartW, 1)) : baseBuffer;
        const transition = windowTransitionRef.current;
@@ -348,7 +440,7 @@ index 4709730..25980e4 100644
        const windowResult = updateWindowTransition(
          cfg,
          transition,
-@@ -3559,6 +3675,9 @@ function Liveline({
+@@ -3559,6 +3614,9 @@ function Liveline({
    onModeChange,
    onSeriesToggle,
    seriesToggleCompact = false,
@@ -358,7 +450,7 @@ index 4709730..25980e4 100644
    lineWidth,
    className,
    style
-@@ -3589,13 +3708,25 @@ function Liveline({
+@@ -3589,13 +3647,26 @@ function Liveline({
    }, [seriesProp, theme]);
    const multiSeries = (0, import_react2.useMemo)(() => {
      if (!seriesProp || !seriesPalettes) return void 0;
@@ -376,6 +468,7 @@ index 4709730..25980e4 100644
 +        ...(s.lineWidth     != null ? { lineWidth:     s.lineWidth     } : {}),
 +        ...(s.lineStyle     != null ? { lineStyle:     s.lineStyle     } : {}),
 +        ...(s.gradientStops != null ? { gradientStops: s.gradientStops } : {}),
++        ...(s.dotColor      != null ? { dotFlat:       s.dotColor      } : {}),
 +      };
 +      return {
 +        id: s.id,
@@ -391,7 +484,7 @@ index 4709730..25980e4 100644
    }, [seriesProp, seriesPalettes, theme]);
    const showMomentum = momentum !== false;
    const momentumOverride = typeof momentum === "string" ? momentum : void 0;
-@@ -3695,7 +3826,9 @@ function Liveline({
+@@ -3695,7 +3766,9 @@ function Liveline({
      lineValue,
      multiSeries,
      isMultiSeries,
@@ -402,7 +495,7 @@ index 4709730..25980e4 100644
    });
    const cursorStyle = scrub ? cursor : "default";
    const activeColor = isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)";
-@@ -3719,7 +3852,7 @@ function Liveline({
+@@ -3719,7 +3792,7 @@ function Liveline({
          }
        }
      ),
@@ -411,7 +504,7 @@ index 4709730..25980e4 100644
        windows && windows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
          "div",
          {
-@@ -3905,7 +4038,7 @@ function Liveline({
+@@ -3905,7 +3978,7 @@ function Liveline({
            ]
          }
        ),
@@ -421,10 +514,10 @@ index 4709730..25980e4 100644
          gap: ws === "text" ? 4 : 2,
          background: ws === "text" ? "transparent" : isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
 diff --git a/node_modules/liveline/dist/index.d.cts b/node_modules/liveline/dist/index.d.cts
-index 414c4e6..ab5ea15 100644
+index 414c4e6..b00858f 100644
 --- a/node_modules/liveline/dist/index.d.cts
 +++ b/node_modules/liveline/dist/index.d.cts
-@@ -45,6 +45,14 @@ interface LivelineSeries {
+@@ -45,6 +45,16 @@ interface LivelineSeries {
      value: number;
      color: string;
      label?: string;
@@ -436,10 +529,12 @@ index 414c4e6..ab5ea15 100644
 +    sessions?: { start: number; end: number }[];
 +    /** Override the stroke width for this individual series (default: palette lineWidth ≈ 2). */
 +    lineWidth?: number;
++    /** Override the inner end-dot fill colour (defaults to line colour). */
++    dotColor?: string;
  }
  interface LivelineProps {
      data: LivelinePoint[];
-@@ -92,6 +100,8 @@ interface LivelineProps {
+@@ -92,6 +102,8 @@ interface LivelineProps {
      onModeChange?: (mode: 'line' | 'candle') => void;
      onSeriesToggle?: (id: string, visible: boolean) => void;
      seriesToggleCompact?: boolean;
@@ -449,10 +544,10 @@ index 414c4e6..ab5ea15 100644
      style?: CSSProperties;
  }
 diff --git a/node_modules/liveline/dist/index.d.ts b/node_modules/liveline/dist/index.d.ts
-index 414c4e6..fbee216 100644
+index 414c4e6..99538d8 100644
 --- a/node_modules/liveline/dist/index.d.ts
 +++ b/node_modules/liveline/dist/index.d.ts
-@@ -45,6 +45,18 @@ interface LivelineSeries {
+@@ -45,6 +45,20 @@ interface LivelineSeries {
      value: number;
      color: string;
      label?: string;
@@ -468,10 +563,12 @@ index 414c4e6..fbee216 100644
 +    lineStyle?: 'solid' | 'dashed' | 'dotted';
 +    /** Two or three colour stops for a horizontal gradient stroke. */
 +    gradientStops?: string[];
++    /** Override the inner end-dot fill colour (defaults to line colour). */
++    dotColor?: string;
  }
  interface LivelineProps {
      data: LivelinePoint[];
-@@ -92,6 +104,9 @@ interface LivelineProps {
+@@ -92,6 +106,9 @@ interface LivelineProps {
      onModeChange?: (mode: 'line' | 'candle') => void;
      onSeriesToggle?: (id: string, visible: boolean) => void;
      seriesToggleCompact?: boolean;
@@ -482,7 +579,7 @@ index 414c4e6..fbee216 100644
      style?: CSSProperties;
  }
 diff --git a/node_modules/liveline/dist/index.js b/node_modules/liveline/dist/index.js
-index fd05062..fa00daa 100644
+index fd05062..7e12506 100644
 --- a/node_modules/liveline/dist/index.js
 +++ b/node_modules/liveline/dist/index.js
 @@ -360,7 +360,7 @@ function blendColor(c1, c2, t) {
@@ -666,7 +763,22 @@ index fd05062..fa00daa 100644
    }
    ctx.restore();
    if (!skipDashLine) {
-@@ -610,6 +705,9 @@ function drawCrosshair(ctx, layout, palette, hoverX, hoverValue, hoverTime, form
+@@ -505,11 +600,12 @@ function drawDot(ctx, x, y, palette, pulse = true, scrubAmount = 0, now_ms = per
+   ctx.globalAlpha = baseAlpha;
+   ctx.beginPath();
+   ctx.arc(x, y, 3.5, 0, Math.PI * 2);
++  const dotFill = palette.dotFlat ?? palette.line;
+   if (dim > 0.01) {
+-    const lineRgb = parseColorRgb(palette.line);
++    const lineRgb = parseColorRgb(dotFill);
+     ctx.fillStyle = lerpColor(lineRgb, outerRgb, dim);
+   } else {
+-    ctx.fillStyle = palette.line;
++    ctx.fillStyle = dotFill;
+   }
+   ctx.fill();
+ }
+@@ -610,6 +706,9 @@ function drawCrosshair(ctx, layout, palette, hoverX, hoverValue, hoverTime, form
    const valueText = formatValue(hoverValue);
    const timeText = formatTime(hoverTime);
    const separator = "  \xB7  ";
@@ -676,7 +788,7 @@ index fd05062..fa00daa 100644
    ctx.save();
    ctx.globalAlpha = scrubOpacity;
    ctx.font = '400 13px "SF Mono", Menlo, monospace';
-@@ -632,7 +730,7 @@ function drawCrosshair(ctx, layout, palette, hoverX, hoverValue, hoverTime, form
+@@ -632,7 +731,7 @@ function drawCrosshair(ctx, layout, palette, hoverX, hoverValue, hoverTime, form
      ctx.strokeText(valueText, tx, ty);
      ctx.strokeText(separator + timeText, tx + valueW, ty);
    }
@@ -685,19 +797,74 @@ index fd05062..fa00daa 100644
    ctx.fillText(valueText, tx, ty);
    ctx.fillStyle = palette.gridLabel;
    ctx.fillText(separator + timeText, tx + valueW, ty);
-@@ -677,7 +775,10 @@ function drawMultiCrosshair(ctx, layout, palette, hoverX, hoverTime, entries, fo
-     segments.push({ text: dotInline, color: e.color, isDot: true });
-     const label = e.label ? `${e.label} ` : "";
-     if (label) segments.push({ text: label, color: palette.gridLabel });
--    segments.push({ text: formatValue(e.value), color: palette.tooltipText });
-+    const vNum = Number(e.value);
-+    const valColor =
-+      vNum > 0 ? "#22c55e" : vNum < 0 ? "#ef4444" : palette.gridLabel;
-+    segments.push({ text: formatValue(e.value), color: valColor });
+@@ -661,66 +760,6 @@ function drawMultiCrosshair(ctx, layout, palette, hoverX, hoverTime, entries, fo
+       ctx.fill();
+     }
    }
-   let totalW = 0;
-   const segWidths = [];
-@@ -1324,12 +1425,15 @@ function drawLineModeCrosshair(ctx, layout, palette, hoverX, value, hoverTime, f
+-  if (scrubOpacity < 0.1 || layout.w < 300) return;
+-  ctx.save();
+-  ctx.globalAlpha = scrubOpacity;
+-  ctx.font = '400 13px "SF Mono", Menlo, monospace';
+-  ctx.textAlign = "left";
+-  const timeText = formatTime(hoverTime);
+-  const sep = "  \xB7  ";
+-  const dotInline = " ";
+-  const segments = [
+-    { text: timeText, color: palette.gridLabel }
+-  ];
+-  for (const e of entries) {
+-    segments.push({ text: sep, color: palette.gridLabel });
+-    segments.push({ text: dotInline, color: e.color, isDot: true });
+-    const label = e.label ? `${e.label} ` : "";
+-    if (label) segments.push({ text: label, color: palette.gridLabel });
+-    segments.push({ text: formatValue(e.value), color: palette.tooltipText });
+-  }
+-  let totalW = 0;
+-  const segWidths = [];
+-  for (const seg of segments) {
+-    const w = seg.isDot ? 12 : ctx.measureText(seg.text).width;
+-    segWidths.push(w);
+-    totalW += w;
+-  }
+-  let tx = hoverX - totalW / 2;
+-  const minX = pad.left + 4;
+-  const dotRightEdge = liveDotX != null ? liveDotX + 7 : layout.w - pad.right;
+-  const maxX = dotRightEdge - totalW;
+-  if (tx < minX) tx = minX;
+-  if (tx > maxX) tx = maxX;
+-  const ty = pad.top + (tooltipY ?? 14) + 10;
+-  if (tooltipOutline !== false) {
+-    ctx.strokeStyle = palette.tooltipBg;
+-    ctx.lineWidth = 3;
+-    ctx.lineJoin = "round";
+-    let ox2 = tx;
+-    for (let i = 0; i < segments.length; i++) {
+-      const seg = segments[i];
+-      if (!seg.isDot) {
+-        ctx.strokeText(seg.text, ox2, ty);
+-      }
+-      ox2 += segWidths[i];
+-    }
+-  }
+-  let ox = tx;
+-  for (let i = 0; i < segments.length; i++) {
+-    const seg = segments[i];
+-    if (seg.isDot) {
+-      ctx.beginPath();
+-      ctx.arc(ox + 4, ty - 4, 3.5, 0, Math.PI * 2);
+-      ctx.fillStyle = seg.color;
+-      ctx.fill();
+-    } else {
+-      ctx.fillStyle = seg.color;
+-      ctx.fillText(seg.text, ox, ty);
+-    }
+-    ox += segWidths[i];
+-  }
+-  ctx.restore();
+ }
+ 
+ // src/draw/referenceLine.ts
+@@ -1324,12 +1363,15 @@ function drawLineModeCrosshair(ctx, layout, palette, hoverX, value, hoverTime, f
    if (opacity < 0.1 || layout.w < 200) return;
    const val = formatValue(value);
    const time = formatTime(hoverTime);
@@ -714,7 +881,7 @@ index fd05062..fa00daa 100644
      { text: "  \xB7  ", color: palette.gridLabel },
      { text: time, color: palette.gridLabel }
    ];
-@@ -1545,7 +1649,7 @@ function drawFrame(ctx, layout, palette, opts) {
+@@ -1545,7 +1587,7 @@ function drawFrame(ctx, layout, palette, opts) {
      const lastPt = pts[pts.length - 1];
      const distToLive = lastPt[0] - opts.hoverX;
      const fadeStart = Math.min(80, layout.chartW * 0.3);
@@ -723,7 +890,7 @@ index fd05062..fa00daa 100644
      if (scrubOpacity > 0.01) {
        drawCrosshair(
          ctx,
-@@ -1600,6 +1704,9 @@ function drawMultiFrame(ctx, layout, opts) {
+@@ -1600,6 +1642,9 @@ function drawMultiFrame(ctx, layout, opts) {
      if (combinedAlpha < 0.01) continue;
      ctx.save();
      if (combinedAlpha < 1) ctx.globalAlpha = combinedAlpha;
@@ -733,7 +900,7 @@ index fd05062..fa00daa 100644
      const pts = drawLine(
        ctx,
        layout,
-@@ -1612,7 +1719,13 @@ function drawMultiFrame(ctx, layout, opts) {
+@@ -1612,7 +1657,13 @@ function drawMultiFrame(ctx, layout, opts) {
        scrubX,
        opts.scrubAmount,
        reveal,
@@ -748,7 +915,29 @@ index fd05062..fa00daa 100644
      );
      ctx.restore();
      if (pts && pts.length > 0) {
-@@ -1667,7 +1780,7 @@ function drawMultiFrame(ctx, layout, opts) {
+@@ -1634,17 +1685,18 @@ function drawMultiFrame(ctx, layout, opts) {
+     for (const entry of allPts) {
+       if (entry.alpha < 0.01) continue;
+       const lastPt = entry.pts[entry.pts.length - 1];
++      const dotFill = entry.palette.dotFlat ?? entry.palette.line;
+       ctx.save();
+       ctx.globalAlpha = dotAlpha * entry.alpha;
+       if (showPulse && entry.alpha > 0.5) {
+-        drawMultiDot(ctx, lastPt[0], lastPt[1], entry.palette.line, true, opts.now_ms, 3);
++        drawMultiDot(ctx, lastPt[0], lastPt[1], dotFill, true, opts.now_ms, 3);
+       } else {
+-        drawSimpleDot(ctx, lastPt[0], lastPt[1], entry.palette.line, 3);
++        drawSimpleDot(ctx, lastPt[0], lastPt[1], dotFill, 3);
+       }
+       if (entry.label) {
+         ctx.font = '600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
+         ctx.textAlign = "left";
+-        ctx.fillStyle = entry.palette.line;
++        ctx.fillStyle = dotFill;
+         ctx.fillText(entry.label, lastPt[0] + 6, lastPt[1] + 3.5);
+       }
+       ctx.restore();
+@@ -1667,7 +1719,7 @@ function drawMultiFrame(ctx, layout, opts) {
      }
      const distToLive = maxLiveDotX - opts.hoverX;
      const fadeStart = Math.min(80, layout.chartW * 0.3);
@@ -757,7 +946,7 @@ index fd05062..fa00daa 100644
      if (scrubOpacity > 0.01) {
        drawMultiCrosshair(
          ctx,
-@@ -1963,8 +2076,8 @@ var VALUE_SNAP_THRESHOLD = 1e-3;
+@@ -1963,8 +2015,8 @@ var VALUE_SNAP_THRESHOLD = 1e-3;
  var ADAPTIVE_SPEED_BOOST = 0.2;
  var MOMENTUM_GREEN = [34, 197, 94];
  var MOMENTUM_RED = [239, 68, 68];
@@ -768,7 +957,7 @@ index fd05062..fa00daa 100644
  var PAUSE_PROGRESS_SPEED = 0.12;
  var PAUSE_CATCHUP_SPEED = 0.08;
  var PAUSE_CATCHUP_SPEED_FAST = 0.22;
-@@ -2584,7 +2697,10 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -2584,7 +2636,10 @@ function useLivelineEngine(canvasRef, containerRef, config) {
            data: s.data.slice(),
            value: s.value,
            palette: s.palette,
@@ -780,7 +969,7 @@ index fd05062..fa00daa 100644
          }));
        }
        if (hasData && !cfg.isMultiSeries) lastMultiSeriesRef.current = [];
-@@ -2633,8 +2749,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -2633,8 +2688,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
      }
      if (isCandle) {
        const candleBuffer = CANDLE_BUFFER_NO_BADGE;
@@ -791,7 +980,7 @@ index fd05062..fa00daa 100644
        const rawLive = pausedCandlesRef.current ? pausedLiveRef.current ?? void 0 : cfg.liveCandle;
        let effectiveLineData = pausedLineDataRef.current ?? cfg.lineData;
        let effectiveLineValue = pausedLineValueRef.current ?? cfg.lineValue;
-@@ -3060,8 +3176,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -3060,8 +3115,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
        }
        const firstSeries = effectiveMultiSeries[0];
        const transition = windowTransitionRef.current;
@@ -802,7 +991,7 @@ index fd05062..fa00daa 100644
        const smoothValues = /* @__PURE__ */ new Map();
        for (const s of effectiveMultiSeries) {
          let dv = displayValuesRef.current.get(s.id);
-@@ -3154,7 +3270,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -3154,7 +3209,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
              if (range.min < globalMin) globalMin = range.min;
              if (range.max > globalMax) globalMax = range.max;
            }
@@ -811,7 +1000,7 @@ index fd05062..fa00daa 100644
          }
        }
        if (seriesEntries.length === 0) {
-@@ -3176,7 +3292,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -3176,7 +3231,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
          rafRef.current = requestAnimationFrame(draw);
          return;
        }
@@ -820,7 +1009,7 @@ index fd05062..fa00daa 100644
        const adaptiveSpeed = cfg.lerpSpeed + ADAPTIVE_SPEED_BOOST * 0.5;
        const rangeResult = updateRange(
          computedRange,
-@@ -3305,8 +3421,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -3305,8 +3360,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
        const needsArrowRoom = cfg.showMomentum && cfg.showBadge;
        const buffer = needsArrowRoom ? Math.max(baseBuffer, 37 / Math.max(chartW, 1)) : baseBuffer;
        const transition = windowTransitionRef.current;
@@ -831,7 +1020,7 @@ index fd05062..fa00daa 100644
        const windowResult = updateWindowTransition(
          cfg,
          transition,
-@@ -3532,6 +3648,9 @@ function Liveline({
+@@ -3532,6 +3587,9 @@ function Liveline({
    onModeChange,
    onSeriesToggle,
    seriesToggleCompact = false,
@@ -841,7 +1030,7 @@ index fd05062..fa00daa 100644
    lineWidth,
    className,
    style
-@@ -3562,13 +3681,25 @@ function Liveline({
+@@ -3562,13 +3620,26 @@ function Liveline({
    }, [seriesProp, theme]);
    const multiSeries = useMemo(() => {
      if (!seriesProp || !seriesPalettes) return void 0;
@@ -859,6 +1048,7 @@ index fd05062..fa00daa 100644
 +        ...(s.lineWidth     != null ? { lineWidth:     s.lineWidth     } : {}),
 +        ...(s.lineStyle     != null ? { lineStyle:     s.lineStyle     } : {}),
 +        ...(s.gradientStops != null ? { gradientStops: s.gradientStops } : {}),
++        ...(s.dotColor      != null ? { dotFlat:       s.dotColor      } : {}),
 +      };
 +      return {
 +        id: s.id,
@@ -874,7 +1064,7 @@ index fd05062..fa00daa 100644
    }, [seriesProp, seriesPalettes, theme]);
    const showMomentum = momentum !== false;
    const momentumOverride = typeof momentum === "string" ? momentum : void 0;
-@@ -3668,7 +3799,9 @@ function Liveline({
+@@ -3668,7 +3739,9 @@ function Liveline({
      lineValue,
      multiSeries,
      isMultiSeries,
@@ -885,7 +1075,7 @@ index fd05062..fa00daa 100644
    });
    const cursorStyle = scrub ? cursor : "default";
    const activeColor = isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)";
-@@ -3692,7 +3825,7 @@ function Liveline({
+@@ -3692,7 +3765,7 @@ function Liveline({
          }
        }
      ),
@@ -894,7 +1084,7 @@ index fd05062..fa00daa 100644
        windows && windows.length > 0 && /* @__PURE__ */ jsxs(
          "div",
          {
-@@ -3878,7 +4011,7 @@ function Liveline({
+@@ -3878,7 +3951,7 @@ function Liveline({
            ]
          }
        ),

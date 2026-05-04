@@ -15,6 +15,14 @@ const TICKER_DISP_RE = /^[A-Z0-9][A-Z0-9.\-^]{0,31}$/i
 const HEX6 = /^#[0-9a-fA-F]{6}$/
 const LINE_STYLES = new Set<LineStyle>(['solid', 'dashed', 'dotted'])
 const DEFAULT_COLOR = '#6366f1'
+const CTRL_CHARS = /[\u0000-\u001F\u007F]/g
+const MAX_COMPANY_NAME = 120
+const MAX_VENUE_DISPLAY = 48
+
+function sanitizeDisplayField(raw: string, maxLen: number): string | undefined {
+  const t = raw.replace(CTRL_CHARS, '').trim().slice(0, maxLen)
+  return t.length > 0 ? t : undefined
+}
 
 function sanitizeHolding(raw: unknown): Holding | null {
   if (!raw || typeof raw !== 'object') return null
@@ -54,10 +62,40 @@ function sanitizeHolding(raw: unknown): Holding | null {
     if (o.lineThickness >= 1 && o.lineThickness <= 4) lineThickness = o.lineThickness
   }
 
+  let dotColor: string | undefined
+  if (typeof o.dotColor === 'string') {
+    const dc = o.dotColor.trim()
+    if (HEX6.test(dc)) dotColor = dc
+  }
+
+  const linear: boolean | undefined =
+    typeof o.linear === 'boolean' ? o.linear : undefined
+
+  let lineOpacity: number | undefined
+  if (typeof o.lineOpacity === 'number' && isFinite(o.lineOpacity)) {
+    const clamped = Math.round(Math.max(0.1, Math.min(1, o.lineOpacity)) * 100) / 100
+    lineOpacity = clamped
+  }
+
+  let companyName: string | undefined
+  if (typeof o.companyName === 'string') {
+    companyName = sanitizeDisplayField(o.companyName, MAX_COMPANY_NAME)
+  }
+
+  let venueDisplay: string | undefined
+  if (typeof o.venueDisplay === 'string') {
+    venueDisplay = sanitizeDisplayField(o.venueDisplay, MAX_VENUE_DISPLAY)
+  }
+
   const h: Holding = { id, ticker, exchange: ex, color }
   if (gradientColors !== undefined) h.gradientColors = gradientColors
   if (lineStyle !== undefined) h.lineStyle = lineStyle
   if (lineThickness !== undefined) h.lineThickness = lineThickness
+  if (dotColor !== undefined) h.dotColor = dotColor
+  if (linear !== undefined) h.linear = linear
+  if (lineOpacity !== undefined) h.lineOpacity = lineOpacity
+  if (companyName !== undefined) h.companyName = companyName
+  if (venueDisplay !== undefined) h.venueDisplay = venueDisplay
   return h
 }
 

@@ -1,17 +1,24 @@
 .header {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  column-gap: 16px;
-  padding: 0 24px;
-  /* Tall enough for analog face + digital labels; avoids border cutting through .clock-meta */
-  min-height: 88px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
   box-sizing: border-box;
   background: var(--header-bg);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   flex-shrink: 0;
+}
+
+.header-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  column-gap: 16px;
+  padding: 0 24px;
+  min-height: 88px;
+  box-sizing: border-box;
 }
 
 .header-wordmark {
@@ -61,6 +68,16 @@
   transition: color 0.2s, opacity 0.2s, background 0.2s;
 }
 
+.theme-toggle:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.theme-toggle:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+
 .theme-toggle:hover {
   opacity: 1;
   color: var(--text);
@@ -76,4 +93,168 @@
   width: 18px;
   height: 18px;
   display: block;
+}
+
+/* Collapsible quote strip: smooth height + fade (no layout snap) */
+.header-hero-slot {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--header-hero-duration, 0.4s) cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.header-hero-slot--open {
+  grid-template-rows: 1fr;
+}
+
+.header-hero-slot-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.header-hero {
+  width: 100%;
+  padding: 8px 24px 12px;
+  border-top: 1px solid var(--border);
+  box-sizing: border-box;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity var(--header-hero-duration, 0.4s) cubic-bezier(0.32, 0.72, 0, 1),
+    transform var(--header-hero-duration, 0.4s) cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.header-hero-slot--open .header-hero {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.header-hero-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65em 1.5em;
+  max-width: 100%;
+}
+
+.header-hero-led {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px 14px;
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: min(100%, 48rem);
+  text-align: left;
+}
+
+.header-hero-led--row {
+  justify-content: flex-start;
+}
+
+/* Match search dropdown hierarchy: .sd-symbol / .sd-name / .sd-exchange */
+.header-hero-symbol {
+  flex-shrink: 0;
+  font-size: clamp(0.9rem, 2.2vw, 1.1rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.header-hero-company {
+  flex: 1;
+  min-width: 0;
+  font-size: clamp(0.85rem, 2vw, 1rem);
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-hero-company--placeholder {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.header-hero-venue {
+  flex-shrink: 0;
+  font-size: clamp(0.65rem, 1.6vw, 0.72rem);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.header-hero-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.35em 0.65em;
+}
+
+.header-hero-pct {
+  font-size: clamp(1.15rem, 2.6vw, 1.55rem);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.header-hero-price {
+  font-size: clamp(1rem, 2.2vw, 1.35rem);
+  font-weight: 500;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header-hero-slot {
+    transition: none;
+  }
+
+  .header-hero {
+    transition: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .header-hero-slot--open .header-hero {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .header-hero-inner {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .header-hero-led--row {
+    flex-direction: column;
+    align-items: center;
+    max-width: 100%;
+    text-align: center;
+    gap: 6px;
+  }
+
+  .header-hero-company {
+    flex: none;
+    width: 100%;
+    max-width: 100%;
+    text-align: center;
+  }
+
+  .header-hero-venue {
+    flex-shrink: 0;
+  }
+
+  .header-hero-stats {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
 }

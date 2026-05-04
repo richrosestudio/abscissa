@@ -1,308 +1,503 @@
+/* ─── Line Style Picker (landscape panel) ───────────────────────────────────── */
+
 .lsp {
-  background: var(--strip-bg);
-  border-radius: 12px;
-  padding: 14px 14px 12px;
-  width: 272px;
-  max-width: calc(100vw - 20px);
+  width: min(92vw, 640px);
+  max-width: 100%;
+  padding: 12px 14px 12px;
   box-sizing: border-box;
-  border: 1px solid var(--input-border);
+  /* Opaque panel so chart lines don’t show through the floating picker */
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
 }
 
 .lsp-heading {
   margin: 0 0 12px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--text);
+  color: var(--text-muted);
   line-height: 1.2;
 }
 
-/* ---------- live preview ---------- */
-.lsp-preview-wrap {
-  width: 100%;
-  margin-bottom: 14px;
-  border-radius: 8px;
-  padding: 5px 0;
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
+.lsp-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 18px;
+  align-items: stretch;
 }
 
-.lsp-preview-svg {
-  display: block;
-  width: 100%;
-  height: 20px;
-}
-
-/* ---------- sections ---------- */
-.lsp-block {
+.lsp-col--controls {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  padding-right: 4px;
+  border-right: 1px solid var(--border);
+  gap: 6px;
 }
 
-.lsp-block + .lsp-block {
-  margin-top: 14px;
-  padding-top: 13px;
-  border-top: 1px solid var(--input-border);
+.lsp-col--colors {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.lsp-block {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lsp-block--controls {
+  border-top: none;
+  padding-top: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.lsp-controls-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: 4px;
+  min-height: 0;
+}
+
+.lsp-controls-main .lsp-sublabel--gap {
+  margin-top: 6px;
+}
+
+.lsp-controls-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.lsp-controls-footer .lsp-opacity-row {
+  margin-top: 0;
+}
+
+.lsp-col--colors > .lsp-block--colour {
+  border-top: none;
+  padding-top: 0;
+}
+
+.lsp-block--colour {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.lsp-block--end-dot {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+.lsp-block--end-dot .lsp-picker-embed {
+  flex: 0 1 auto;
+  min-height: 140px;
+}
+
+.lsp-block--end-dot .lsp-picker-embed .cpicker {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .lsp-sublabel {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-transform: none;
   color: var(--text-muted);
-  line-height: 1;
+  margin-bottom: 8px;
+  line-height: 1.2;
+  display: block;
 }
 
 .lsp-sublabel--gap {
-  margin-top: 2px;
+  margin-top: 11px;
 }
 
-/* ---------- stroke buttons (SVG dash preview) ---------- */
-.lsp-stroke-row {
-  display: flex;
-  gap: 5px;
+.lsp-sublabel--plain {
+  margin-bottom: 0;
+  letter-spacing: 0.04em;
 }
 
-.lsp-stroke-btn {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  padding: 9px 4px 7px;
-  border-radius: 8px;
-  border: 1px solid var(--input-border);
-  background: var(--input-bg);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition:
-    border-color 0.12s ease,
-    background 0.12s ease,
-    color 0.12s ease;
-  outline: none;
-}
-
-.lsp-stroke-btn:hover {
-  border-color: var(--text-muted);
-  color: var(--text);
-  background: var(--hover-bg);
-}
-
-.lsp-stroke-btn.is-on {
-  border-color: var(--text);
-  background: var(--hover-bg);
-  color: var(--text);
-}
-
-.lsp-stroke-svg {
+/* Preview */
+.lsp-preview-wrap {
   width: 100%;
-  max-width: 48px;
-  height: 14px;
-  display: block;
+  height: 52px;
   flex-shrink: 0;
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
-/* ---------- weight buttons (SVG line preview) ---------- */
+.lsp-preview-svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Stroke / weight */
+.lsp-stroke-row,
 .lsp-weight-row {
   display: flex;
   gap: 5px;
 }
 
+.lsp-stroke-btn,
 .lsp-weight-btn {
   flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 9px 4px 7px;
-  border-radius: 8px;
-  border: 1px solid var(--input-border);
-  background: var(--input-bg);
+  gap: 3px;
+  padding: 6px 4px 4px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition:
-    border-color 0.12s ease,
-    background 0.12s ease,
-    color 0.12s ease;
-  outline: none;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  min-width: 0;
 }
 
+.lsp-stroke-btn:hover,
 .lsp-weight-btn:hover {
   border-color: var(--text-muted);
   color: var(--text);
-  background: var(--hover-bg);
 }
 
+.lsp-stroke-btn.is-on,
 .lsp-weight-btn.is-on {
-  border-color: var(--text);
-  background: var(--hover-bg);
-  color: var(--text);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
 }
 
-.lsp-weight-svg {
-  width: 100%;
-  max-width: 36px;
+.lsp-stroke-svg {
+  width: 48px;
   height: 14px;
   display: block;
   flex-shrink: 0;
 }
 
-/* shared label under both stroke and weight buttons */
-.lsp-opt-label {
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  color: inherit;
+.lsp-weight-svg {
+  width: 36px;
+  height: 14px;
+  display: block;
 }
 
-/* ---------- solid/gradient segmented control ---------- */
+.lsp-opt-label {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  font-weight: 500;
+}
+
+/* Segments */
 .lsp-seg-row {
   display: flex;
-  gap: 4px;
+  gap: 5px;
 }
 
 .lsp-seg {
   flex: 1;
-  min-width: 0;
-  border: 1px solid var(--input-border);
-  background: var(--input-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
   color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  padding: 8px 6px;
-  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
-  transition:
-    border-color 0.12s ease,
-    background 0.12s ease,
-    color 0.12s ease;
-  outline: none;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  white-space: nowrap;
 }
 
 .lsp-seg:hover {
   border-color: var(--text-muted);
   color: var(--text);
-  background: var(--hover-bg);
 }
 
 .lsp-seg.is-on {
-  border-color: var(--text);
-  background: var(--hover-bg);
-  color: var(--text);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
 }
 
-/* ---------- gradient ramp ---------- */
+.lsp-curve-svg {
+  width: 26px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+/* Opacity */
+.lsp-opacity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.lsp-opacity-readout {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  min-width: 38px;
+  text-align: right;
+}
+
+.lsp-slider-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.lsp-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.lsp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-subtle);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  transition: transform 0.1s;
+}
+
+.lsp-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.lsp-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  border: none;
+}
+
+/* Presets */
+.lsp-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.lsp-preset-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  box-sizing: border-box;
+  transition: transform 0.1s, box-shadow 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+
+.lsp-preset-swatch:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 2px var(--text-muted);
+}
+
+.lsp-preset-swatch.is-on {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* Gradient ramp */
 .lsp-ramp-wrap {
-  margin-top: 2px;
+  margin-bottom: 8px;
 }
 
 .lsp-ramp-inner {
   position: relative;
-  margin: 0 2px;
-  padding-bottom: 22px;
 }
 
 .lsp-ramp-track {
-  height: 12px;
-  border-radius: 6px;
-  border: 1px solid var(--input-border);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15);
+  height: 10px;
+  border-radius: 5px;
 }
 
 .lsp-ramp-stops {
   position: absolute;
+  top: 50%;
   left: 0;
   right: 0;
-  top: 0;
-  height: 12px;
-  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .lsp-ramp-dot {
-  pointer-events: auto;
   position: absolute;
+  transform: translateX(-50%) translateY(-50%);
   top: 50%;
-  width: 20px;
-  height: 20px;
-  margin-top: -10px;
-  margin-left: -10px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  border: 2.5px solid var(--strip-bg);
-  box-shadow:
-    0 0 0 1.5px var(--input-border),
-    0 2px 6px rgba(0, 0, 0, 0.22);
-  padding: 0;
+  border: 2px solid var(--border);
   cursor: pointer;
-  transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
-  outline: none;
+  padding: 0;
+  transition: transform 0.1s, box-shadow 0.1s;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
 }
 
 .lsp-ramp-dot:hover {
-  transform: scale(1.1);
+  transform: translateX(-50%) translateY(-50%) scale(1.2);
 }
 
 .lsp-ramp-dot.is-on {
-  border-color: var(--strip-bg);
-  box-shadow:
-    0 0 0 2.5px var(--text),
-    0 2px 6px rgba(0, 0, 0, 0.26);
-  transform: scale(1.08);
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
-/* ---------- grad tools ---------- */
 .lsp-grad-tools {
+  margin-bottom: 10px;
+}
+
+.lsp-picker-embed {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 8px;
+}
+
+.lsp-picker-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  flex-shrink: 0;
+}
+
+/* Colour picker grows with column height inside line-colour block */
+.lsp-block--colour .lsp-picker-embed .cpicker {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.lsp .cpicker .react-colorful {
+  width: 100% !important;
+  max-width: 100%;
+  min-height: 140px;
+  height: 100% !important;
+  flex: 1 1 140px;
 }
 
 .lsp-mini-btn {
-  border: none;
   background: none;
+  border: none;
   padding: 0;
   font-size: 10px;
-  font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
-  outline: none;
+  transition: color 0.12s;
 }
 
 .lsp-mini-btn:hover {
   color: var(--text);
 }
 
-.lsp-stroke-btn:focus-visible,
-.lsp-weight-btn:focus-visible,
-.lsp-seg:focus-visible,
-.lsp-ramp-dot:focus-visible,
-.lsp-mini-btn:focus-visible {
-  outline: 2px solid var(--ring);
+.lsp-dot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.lsp-dot-swatch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lsp-dot-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s, box-shadow 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+
+.lsp-dot-swatch:hover {
+  transform: scale(1.1);
+}
+
+.lsp-dot-swatch.is-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.lsp-dot-swatch:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* ---------- embedded colour picker ---------- */
-.lsp-picker-embed {
-  margin-top: 8px;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid var(--input-border);
-}
+@media (max-width: 560px) {
+  .lsp-body {
+    grid-template-columns: 1fr;
+    gap: 8px 0;
+  }
 
-.lsp-picker-embed .cpicker {
-  border-radius: 0;
-}
+  .lsp-col--controls {
+    border-right: none;
+    padding-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+  }
 
-.lsp-picker-embed .react-colorful {
-  width: 100% !important;
+  .lsp-controls-footer {
+    margin-top: 12px;
+  }
+
+  .lsp-block--end-dot {
+    margin-top: 12px;
+  }
 }

@@ -6,13 +6,18 @@ interface Props {
 }
 
 export default function Portal({ children }: Props) {
-  const el = useRef(document.createElement('div'))
+  const el = useRef<HTMLDivElement | null>(null)
+  if (el.current === null) {
+    const node = document.createElement('div')
+    node.className = 'portal-mount'
+    el.current = node
+  }
 
   useEffect(() => {
-    const container = el.current
+    const container = el.current!
     document.body.appendChild(container)
     return () => { document.body.removeChild(container) }
   }, [])
 
-  return createPortal(children, el.current)
+  return createPortal(children, el.current!)
 }

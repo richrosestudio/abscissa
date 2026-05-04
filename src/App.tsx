@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { Exchange, Holding, Theme, TimeRange } from './types'
+import type { Exchange, Holding, HoldingSearchMeta, Theme, TimeRange } from './types'
 import { detectExchange, normalizeId } from './utils/exchange'
 import { nextColor } from './utils/colors'
 import {
@@ -15,11 +15,28 @@ import {
 import { updateFavicon } from './utils/favicon'
 import { useIntradayData } from './hooks/useIntradayData'
 import Header from './components/Header'
+import { captureAppAsPng } from './utils/capturePagePng'
 import Chart, { type ChartRef } from './components/Chart'
 import BottomStrip from './components/BottomStrip'
 import Splash from './components/Splash'
 import TimeRangePicker from './components/TimeRangePicker'
 import './index.css'
+
+const META_CTRL = /[\u0000-\u001F\u007F]/g
+
+function sanitizeAddMeta(meta?: HoldingSearchMeta): Partial<Pick<Holding, 'companyName' | 'venueDisplay'>> {
+  if (!meta) return {}
+  const out: Partial<Pick<Holding, 'companyName' | 'venueDisplay'>> = {}
+  if (typeof meta.companyName === 'string') {
+    const s = meta.companyName.replace(META_CTRL, '').trim().slice(0, 120)
+    if (s) out.companyName = s
+  }
+  if (typeof meta.venueDisplay === 'string') {
+    const s = meta.venueDisplay.replace(META_CTRL, '').trim().slice(0, 48)
+    if (s) out.venueDisplay = s
+  }
+  return out
+}
 
 export default function App() {
   const [theme, setTheme] = useState<Theme>(() => loadTheme())
@@ -65,7 +82,7 @@ export default function App() {
     meta.setAttribute('content', theme === 'dark' ? '#0a0a0f' : '#f8f8f6')
   }, [theme])
 
-  // Cycle tab title through each holding when the tab is visible (slower cadence to reduce noise)
+  // Cycle tab title through each holding every 2s when the tab is visible
   const cycleIdx = useRef(0)
 
   useEffect(() => {
@@ -86,7 +103,7 @@ export default function App() {
       if (document.visibilityState !== 'visible') return
       cycleIdx.current = (cycleIdx.current + 1) % holdings.length
       updateTitle()
-    }, 8000)
+    }, 2000)
 
     return () => clearInterval(id)
   }, [holdings, seriesData])
@@ -112,12 +129,13 @@ export default function App() {
     }
   }, [])
 
-  const addHolding = (ticker: string) => {
+  const addHolding = (ticker: string, meta?: HoldingSearchMeta) => {
     const id = normalizeId(ticker)
     if (holdings.find(h => h.id === id)) return
     const exchange = detectExchange(id)
     const color = nextColor(holdings.map(h => h.color))
-    setHoldings(prev => [...prev, { id, ticker: id, exchange, color }])
+    const extra = sanitizeAddMeta(meta)
+    setHoldings(prev => [...prev, { id, ticker: id, exchange, color, ...extra }])
   }
 
   const removeHolding = (id: string) => {
@@ -129,6 +147,17 @@ export default function App() {
     setHoldings(prev => prev.map(h => h.id === id ? { ...h, color } : h))
   }
 
+  const updateDotColor = (id: string, dotColor: string | undefined) => {
+    setHoldings(prev => prev.map(h => {
+      if (h.id !== id) return h
+      if (dotColor === undefined) {
+        const { dotColor: _removed, ...rest } = h
+        return rest as typeof h
+      }
+      return { ...h, dotColor }
+    }))
+  }
+
   const updateStyle = useCallback(
     (id: string, patch: Partial<Pick<Holding, 'lineStyle' | 'lineThickness' | 'gradientColors'>>) => {
       setHoldings(prev => prev.map(h => h.id === id ? { ...h, ...patch } : h))
@@ -136,9 +165,37 @@ export default function App() {
     [],
   )
 
+  const updateLinear = useCallback((id: string, linear: boolean) => {
+    setHoldings(prev => prev.map(h => h.id === id ? { ...h, linear } : h))
+  }, [])
+
+  const updateOpacity = useCallback((id: string, lineOpacity: number) => {
+    setHoldings(prev => prev.map(h => h.id === id ? { ...h, lineOpacity } : h))
+  }, [])
+
   const toggleFocus = (id: string) => {
     setFocusedId(prev => prev === id ? null : id)
   }
+
+  const focusedHolding = holdings.find(h => h.id === focusedId) ?? null
+
+  const onScreenshot = useCallback(async () => {
+    try {
+      await captureAppAsPng()
+    } catch (e) {
+      console.error('Screenshot failed', e, String(e))
+      alert('Could not save screenshot. Please try again.')
+    }
+  }, [])
+
+  const onHoldingMetaResolved = useCallback(
+    (id: string, meta: Partial<Pick<Holding, 'companyName' | 'venueDisplay'>>) => {
+      const sanitized = sanitizeAddMeta(meta)
+      if (Object.keys(sanitized).length === 0) return
+      setHoldings(prev => prev.map(h => (h.id === id ? { ...h, ...sanitized } : h)))
+    },
+    [],
+  )
 
   return (
     <div className="app" data-idle={idle ? 'true' : undefined}>
@@ -146,9 +203,13 @@ export default function App() {
       <Header
         theme={theme}
         onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+        onScreenshot={onScreenshot}
         hoveredTime={hoveredTime}
         selectedExchange={selectedExchange}
         onSelectExchange={toggleExchange}
+        focusedHolding={focusedHolding}
+        seriesData={seriesData}
+        onHoldingMetaResolved={onHoldingMetaResolved}
       />
       {usingMock && simulatedReason === 'after_hours' && (
         <div role="status" aria-live="polite" className="mock-banner">
@@ -201,6 +262,9 @@ export default function App() {
         onFocus={toggleFocus}
         onResetFocus={() => setFocusedId(null)}
         onColorChange={updateColor}
+        onDotColorChange={updateDotColor}
+        onLinearChange={updateLinear}
+        onOpacityChange={updateOpacity}
         onStyleChange={updateStyle}
         onAdd={addHolding}
         onRemove={removeHolding}

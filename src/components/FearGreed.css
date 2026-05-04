@@ -21,6 +21,7 @@
   align-items: center;
   justify-content: center;
   align-self: center;
+  gap: 6px;
 }
 
 /* Single link: children sit on .fg-widget grid */

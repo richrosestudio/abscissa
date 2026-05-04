@@ -75,7 +75,7 @@ export default function ColorPicker({ color, onChange }: Props) {
       <HexColorPicker color={color} onChange={handleCanvasChange} />
       <div className="cpicker-inputs">
         <div className="cpicker-field cpicker-hex">
-          <label className="cpicker-label">HEX</label>
+          <label className="cpicker-label">Hex</label>
           <input
             className="cpicker-input"
             value={hexInput}

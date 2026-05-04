@@ -778,7 +778,10 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
         const isDimmedByFocus = focusedId !== null && focusedId !== h.id
         const isFocused      = focusedId !== null && focusedId === h.id
 
-        const color     = isDimmedByFocus ? hexToRgba(h.color, 0.07) : h.color
+        const rawColor  = isDimmedByFocus ? hexToRgba(h.color, 0.07) : h.color
+        const color     = !isDimmedByFocus && h.lineOpacity != null && h.lineOpacity < 1
+          ? hexToRgba(h.color, h.lineOpacity)
+          : rawColor
         const thickness = h.lineThickness ?? 2
         const lineWidth = focusedId === null
           ? thickness
@@ -811,11 +814,12 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
             color,
             label: h.ticker,
             extendToNow: true,
-            linear: false,
+            linear: h.linear ?? false,
             lineWidth,
             lineStyle: h.lineStyle ?? 'solid',
             ...(gradientStops ? { gradientStops } : {}),
             ...(timeRange === '1D' && sessions != null ? { sessions } : {}),
+            ...(h.dotColor != null ? { dotColor: h.dotColor } : {}),
           },
         ]
       })

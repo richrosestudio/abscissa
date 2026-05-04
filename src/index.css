@@ -22,6 +22,10 @@ a:focus:not(:focus-visible) {
   outline: none;
 }
 
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+}
+
 /* ─── Theme tokens ───────────────────────────────────────────── */
 :root, [data-theme="dark"] {
   --bg:           #0a0a0f;
@@ -71,8 +75,15 @@ a:focus:not(:focus-visible) {
   height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-family: var(--font-ui);
   transition: opacity 0.6s ease;
+}
+
+/* Portals mount on body outside #root — inherit same UI stack as .app */
+.portal-mount {
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
 }
 
 .app[data-idle="true"] {

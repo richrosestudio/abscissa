@@ -60,19 +60,19 @@
 }
 
 .cpicker-label {
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--text-muted);
+  line-height: 1.2;
   white-space: nowrap;
-  width: 24px;
+  width: 28px;
   flex-shrink: 0;
 }
 
 .cpicker-hex .cpicker-label {
-  width: 26px;
+  width: 30px;
 }
 
 .cpicker-input {
