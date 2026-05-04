@@ -607,10 +607,11 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
           ? [h.color, ...h.gradientColors]
           : undefined
 
-        // Liveline dims strokes outside `sessions`; use each listing's home exchange so
-        // e.g. US names stay faded on the LSE clock until NASDAQ/NYSE hours reach them on the X axis.
+        // liveline's session-aware renderer (renderCurveWithSessions) uses a plain
+        // strokeStyle string and ignores gradientStops entirely. Skip sessions for
+        // gradient lines so renderCurve handles the stroke instead.
         let sessions: { start: number; end: number }[] | undefined
-        if (timeRange === '1D' && zoneEnd > leftEdge) {
+        if (!gradientStops && timeRange === '1D' && zoneEnd > leftEdge) {
           sessions = mergeIntervals(getOpenIntervalsForExchange(h.exchange, leftEdge, zoneEnd))
         }
 

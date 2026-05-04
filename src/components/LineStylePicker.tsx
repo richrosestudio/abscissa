@@ -14,8 +14,8 @@ interface Props {
 
 const LINE_STYLES: { value: LineStyle; label: string; dash: string | undefined }[] = [
   { value: 'solid', label: 'Solid', dash: undefined },
-  { value: 'dashed', label: 'Dashed', dash: '11 9' },
-  { value: 'dotted', label: 'Dotted', dash: '2 7' },
+  { value: 'dashed', label: 'Dashed', dash: '10 8' },
+  { value: 'dotted', label: 'Dotted', dash: '2 6' },
 ]
 
 const THICKNESSES: { value: number; label: string }[] = [
@@ -50,10 +50,10 @@ export default function LineStylePicker({ holding, onPrimaryColorChange, onStyle
     return `linear-gradient(to right, ${strokeStops.join(', ')})`
   }, [isGradient, strokeStops, holding.color])
 
-  useEffect(() => {
-    setColorFocus('primary')
-  }, [holding.id])
+  // Reset focus when switching holding
+  useEffect(() => { setColorFocus('primary') }, [holding.id])
 
+  // Clamp focus index if stops were removed
   useEffect(() => {
     if (colorFocus === 'primary') return
     if (typeof colorFocus === 'number' && (colorFocus < 0 || colorFocus >= grad.length)) {
@@ -74,9 +74,7 @@ export default function LineStylePicker({ holding, onPrimaryColorChange, onStyle
   const setThreeStops = () => {
     if (grad.length === 1) {
       const end = grad[0]!
-      onStyleChange({
-        gradientColors: [mixHex(holding.color, end, 0.5), end],
-      })
+      onStyleChange({ gradientColors: [mixHex(holding.color, end, 0.5), end] })
       setColorFocus(0)
     }
   }
@@ -104,17 +102,6 @@ export default function LineStylePicker({ holding, onPrimaryColorChange, onStyle
     else if (typeof colorFocus === 'number') updateGradStop(colorFocus, hex)
   }
 
-  const stopLabel =
-    colorFocus === 'primary'
-      ? 'Line start'
-      : grad.length === 1 && colorFocus === 0
-        ? 'Line end'
-        : grad.length === 2 && colorFocus === 0
-          ? 'Middle'
-          : grad.length === 2 && colorFocus === 1
-            ? 'Line end'
-            : `Stop ${colorFocus + 2}`
-
   const gradId = `lsp-grad-${uid}`
   const nStops = strokeStops.length
 
@@ -122,16 +109,13 @@ export default function LineStylePicker({ holding, onPrimaryColorChange, onStyle
     <div className="lsp">
       <p className="lsp-heading">Line appearance</p>
 
+      {/* Live preview strip */}
       <div
         className="lsp-preview-wrap"
         role="img"
-        aria-label="Preview of line stroke, weight, and colours"
+        aria-label="Preview of line appearance"
       >
-        <svg
-          className="lsp-preview-svg"
-          viewBox="0 0 220 22"
-          preserveAspectRatio="xMidYMid meet"
-        >
+        <svg className="lsp-preview-svg" viewBox="0 0 240 20" preserveAspectRatio="xMidYMid meet">
           <defs>
             <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
               {strokeStops.map((c, i) => (
@@ -144,12 +128,9 @@ export default function LineStylePicker({ holding, onPrimaryColorChange, onStyle
             </linearGradient>
           </defs>
           <line
-            x1="6"
-            y1="11"
-            x2="214"
-            y2="11"
+            x1="8" y1="10" x2="232" y2="10"
             stroke={`url(#${gradId})`}
-            strokeWidth={activeThick}
+            strokeWidth={activeThick + 0.5}
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeDasharray={LINE_STYLES.find(s => s.value === activeStyle)?.dash}
@@ -157,18 +138,29 @@ export default function LineStylePicker({ holding, onPrimaryColorChange, onStyle
         </svg>
       </div>
 
+      {/* Stroke + Weight */}
       <div className="lsp-block">
-        <span className="lsp-sublabel">Stroke</span>
-        <div className="lsp-seg-row">
+        <span className="lsp-sublabel">Style</span>
+        <div className="lsp-stroke-row">
           {LINE_STYLES.map(s => (
             <button
               key={s.value}
               type="button"
-              className={`lsp-seg ${activeStyle === s.value ? 'is-on' : ''}`}
+              className={`lsp-stroke-btn ${activeStyle === s.value ? 'is-on' : ''}`}
               onClick={() => onStyleChange({ lineStyle: s.value })}
               aria-pressed={activeStyle === s.value}
+              title={s.label}
             >
-              {s.label}
+              <svg viewBox="0 0 48 14" className="lsp-stroke-svg" aria-hidden>
+                <line
+                  x1="4" y1="7" x2="44" y2="7"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeDasharray={s.dash}
+                />
+              </svg>
+              <span className="lsp-opt-label">{s.label}</span>
             </button>
           ))}
         </div>
@@ -179,20 +171,26 @@ export default function LineStylePicker({ holding, onPrimaryColorChange, onStyle
             <button
               key={t.value}
               type="button"
-              className={`lsp-weight ${activeThick === t.value ? 'is-on' : ''}`}
+              className={`lsp-weight-btn ${activeThick === t.value ? 'is-on' : ''}`}
               onClick={() => onStyleChange({ lineThickness: t.value })}
               aria-pressed={activeThick === t.value}
               title={t.label}
             >
-              <span className="lsp-weight-barwrap" aria-hidden>
-                <span className="lsp-weight-bar" data-w={t.value} />
-              </span>
-              <span className="lsp-weight-label">{t.label}</span>
+              <svg viewBox="0 0 36 14" className="lsp-weight-svg" aria-hidden>
+                <line
+                  x1="4" y1="7" x2="32" y2="7"
+                  stroke="currentColor"
+                  strokeWidth={t.value * 1.3 + 0.5}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="lsp-opt-label">{t.label}</span>
             </button>
           ))}
         </div>
       </div>
 
+      {/* Colour */}
       <div className="lsp-block">
         <span className="lsp-sublabel">Colour</span>
         <div className="lsp-seg-row">
@@ -207,9 +205,7 @@ export default function LineStylePicker({ holding, onPrimaryColorChange, onStyle
           <button
             type="button"
             className={`lsp-seg ${isGradient ? 'is-on' : ''}`}
-            onClick={() => {
-              if (!isGradient) setGradientTwo()
-            }}
+            onClick={() => { if (!isGradient) setGradientTwo() }}
             aria-pressed={isGradient}
           >
             Gradient
@@ -240,15 +236,13 @@ export default function LineStylePicker({ holding, onPrimaryColorChange, onStyle
                         style={{ left: `${posPct}%`, background: c }}
                         onClick={() => setColorFocus(i)}
                         aria-label={
-                          grad.length === 1 && i === 0
+                          grad.length === 1
                             ? 'Line end colour'
-                            : grad.length === 2 && i === 0
+                            : i === 0
                               ? 'Middle colour'
-                              : `Colour stop ${i + 2}`
+                              : 'Line end colour'
                         }
-                        title={
-                          grad.length === 1 ? 'End' : grad.length === 2 && i === 0 ? 'Middle' : 'End'
-                        }
+                        title={grad.length === 1 ? 'End' : i === 0 ? 'Middle' : 'End'}
                       />
                     )
                   })}
@@ -269,15 +263,13 @@ export default function LineStylePicker({ holding, onPrimaryColorChange, onStyle
             </div>
 
             <div className="lsp-picker-embed">
-              <p className="lsp-picker-cap">{stopLabel}</p>
               <ColorPicker color={pickerColor} onChange={applyPickerColor} />
             </div>
           </>
         )}
 
         {!isGradient && (
-          <div className="lsp-picker-embed lsp-picker-embed--solo">
-            <p className="lsp-picker-cap">Line colour</p>
+          <div className="lsp-picker-embed">
             <ColorPicker color={holding.color} onChange={onPrimaryColorChange} />
           </div>
         )}

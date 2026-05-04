@@ -17,14 +17,13 @@ interface Props {
   onStyleChange: (id: string, patch: Partial<Pick<Holding, 'lineStyle' | 'lineThickness' | 'gradientColors'>>) => void
   onAdd: (ticker: string) => void
   onRemove: (id: string) => void
-  /** Last fetch error message per holding id (hover for detail) */
   tickerErrors?: Record<string, string>
   timeRange: TimeRange
   pctFootnoteHidden: boolean
   onPctFootnoteHiddenChange: (hidden: boolean) => void
 }
 
-/** Binary-search for the point in a sorted series closest to targetTime */
+/** Binary-search for the nearest data point to `targetTime` */
 function nearestPct(points: SeriesData['points'], targetTime: number): number | null {
   if (points.length === 0) return null
   let lo = 0, hi = points.length - 1
@@ -33,7 +32,6 @@ function nearestPct(points: SeriesData['points'], targetTime: number): number | 
     if (points[mid].time < targetTime) lo = mid + 1
     else hi = mid
   }
-  // Check both sides of the boundary
   if (lo > 0 && Math.abs(points[lo - 1].time - targetTime) < Math.abs(points[lo].time - targetTime)) {
     return points[lo - 1].value
   }
@@ -68,6 +66,7 @@ interface PopupPos {
   bottom: number
 }
 
+/** Used only for the line-appearance panel (still needs a portal above the chart). */
 function useAnchoredPopup(anchorRef: React.RefObject<HTMLElement | null>) {
   const [pos, setPos] = useState<PopupPos | null>(null)
 
@@ -76,7 +75,7 @@ function useAnchoredPopup(anchorRef: React.RefObject<HTMLElement | null>) {
     if (!el) { setPos(null); return }
     const r = el.getBoundingClientRect()
     setPos({
-      bottom: window.innerHeight - r.top + 6,
+      bottom: window.innerHeight - r.top + 8,
       top: r.top,
       left: r.left,
       right: window.innerWidth - r.right,
@@ -85,29 +84,23 @@ function useAnchoredPopup(anchorRef: React.RefObject<HTMLElement | null>) {
 
   useEffect(() => {
     if (!pos) return
-    window.addEventListener('scroll', update, true)
     window.addEventListener('resize', update)
-    return () => {
-      window.removeEventListener('scroll', update, true)
-      window.removeEventListener('resize', update)
-    }
+    return () => window.removeEventListener('resize', update)
   }, [pos, update])
 
   return { pos, open: update, close: () => setPos(null) }
 }
 
-function pctBaselineFootnote(timeRange: TimeRange): { text: string; title: string } {
+function pctFootnote(timeRange: TimeRange): { short: string; detail: string } {
   if (timeRange === '1D') {
     return {
-      text: "% change vs yesterday's close pre-market, then vs today's open once trading starts.",
-      title:
-        'Extended hours use the previous closing price as the baseline. Regular trading hours use the official opening price for that session.',
+      short: '% vs yesterday\'s close (pre-market), then vs session open once trading starts.',
+      detail: 'Extended hours use the previous closing price as the baseline. Regular trading hours use the official opening price for that session.',
     }
   }
   return {
-    text: `This range: % change from each line's first price in the ${timeRange} window.`,
-    title:
-      'The baseline is the first reliable closing price at the start of the period you selected (1W, 1M, etc.).',
+    short: `% change from each line's first price in the ${timeRange} window.`,
+    detail: 'The baseline is the first reliable closing price at the start of the period you selected.',
   }
 }
 
@@ -116,8 +109,6 @@ export default function BottomStrip({
   onFocus, onResetFocus, onColorChange, onStyleChange, onAdd, onRemove,
   tickerErrors = {},
   timeRange,
-  pctFootnoteHidden,
-  onPctFootnoteHiddenChange,
 }: Props) {
   const [stylePickerId, setStylePickerId] = useState<string | null>(null)
   const [addInput, setAddInput] = useState('')
@@ -126,7 +117,7 @@ export default function BottomStrip({
   const animPctsRef = useRef<Record<string, AnimatedPct>>({})
   const swatchRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
-  // Search state
+  // Search state — dropdown is absolutely positioned, no portal needed
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
@@ -134,16 +125,12 @@ export default function BottomStrip({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
-  const inputWrapRef = useRef<HTMLDivElement>(null)
 
-  // Portal position for search dropdown
-  const searchAnchor = useAnchoredPopup(inputWrapRef as React.RefObject<HTMLElement | null>)
-
-  // Portal position for line appearance panel (colour + stroke)
+  // Line-appearance picker still uses a portal to float above the chart
   const styleAnchorRef = useRef<HTMLButtonElement | null>(null)
   const stylePopup = useAnchoredPopup(styleAnchorRef)
 
-  // Sync pct animation targets
+  // --- pct animation ---
   useEffect(() => {
     setAnimPcts(prev => {
       const next = { ...prev }
@@ -185,7 +172,7 @@ export default function BottomStrip({
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [])
 
-  // Debounced search
+  // --- search ---
   const runSearch = useCallback(async (q: string) => {
     if (q.length < 1) { setSearchResults([]); setSearchOpen(false); return }
     setSearchLoading(true)
@@ -195,28 +182,21 @@ export default function BottomStrip({
       const data = await res.json()
       const results = data.results ?? []
       setSearchResults(results)
-      if (results.length > 0) {
-        setSearchOpen(true)
-        searchAnchor.open()
-      } else {
-        setSearchOpen(false)
-        searchAnchor.close()
-      }
+      setSearchOpen(results.length > 0)
       setHighlightedIdx(-1)
     } catch {
       setSearchResults([])
       setSearchOpen(false)
-      searchAnchor.close()
     } finally {
       setSearchLoading(false)
     }
-  }, [searchAnchor])
+  }, [])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.toUpperCase()
     setAddInput(val)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (val.length === 0) { setSearchResults([]); setSearchOpen(false); searchAnchor.close(); return }
+    if (val.length === 0) { setSearchResults([]); setSearchOpen(false); return }
     debounceRef.current = setTimeout(() => runSearch(val), 220)
   }
 
@@ -225,7 +205,6 @@ export default function BottomStrip({
     setAddInput('')
     setSearchResults([])
     setSearchOpen(false)
-    searchAnchor.close()
     setHighlightedIdx(-1)
   }
 
@@ -245,14 +224,23 @@ export default function BottomStrip({
         setAddInput('')
         setSearchResults([])
         setSearchOpen(false)
-        searchAnchor.close()
       }
     } else if (e.key === 'Escape') {
       setSearchOpen(false)
-      searchAnchor.close()
+      setHighlightedIdx(-1)
     }
   }
 
+  // Blur closes the dropdown — mousedown on a result fires first (onMouseDown), selecting it
+  const handleInputBlur = () => {
+    setTimeout(() => setSearchOpen(false), 160)
+  }
+
+  const handleInputFocus = () => {
+    if (searchResults.length > 0) setSearchOpen(true)
+  }
+
+  // --- line-appearance picker ---
   const openLineAppearance = (id: string, btn: HTMLButtonElement) => {
     if (stylePickerId === id) {
       setStylePickerId(null)
@@ -264,11 +252,10 @@ export default function BottomStrip({
     }
   }
 
-  // Close on outside click
+  // Close picker on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const t = e.target as Node
-      // Check if click is inside any portal popup or the strip itself
       const inStrip = document.querySelector('.strip')?.contains(t)
       const inPortals = document.querySelectorAll('.portal-popup')
       let inPortal = false
@@ -276,15 +263,13 @@ export default function BottomStrip({
       if (!inStrip && !inPortal) {
         setStylePickerId(null)
         stylePopup.close()
-        setSearchOpen(false)
-        searchAnchor.close()
       }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [stylePopup, searchAnchor])
+  }, [stylePopup])
 
-  // Scroll highlighted item into view
+  // Keyboard scroll for highlighted search item
   useEffect(() => {
     if (highlightedIdx >= 0 && dropdownRef.current) {
       const item = dropdownRef.current.children[highlightedIdx] as HTMLElement
@@ -292,40 +277,42 @@ export default function BottomStrip({
     }
   }, [highlightedIdx])
 
-  const pctNote = pctBaselineFootnote(timeRange)
+  const note = pctFootnote(timeRange)
+  const tooltipText = `${note.short}\n\n${note.detail}`
+
+  const isEmpty = holdings.length === 0
 
   return (
     <div className="strip">
+
+      {/* Reset-focus × — only meaningful when something is focused */}
       <button
-        className={`strip-reset ${focusedId === null ? 'disabled' : ''}`}
-        onClick={e => {
-          e.stopPropagation()
-          onResetFocus?.()
-        }}
+        className="strip-reset"
+        onClick={e => { e.stopPropagation(); onResetFocus?.() }}
         disabled={focusedId === null}
         aria-label="Show all tickers"
-        title="Show all tickers"
+        title="Show all"
       >
         ×
       </button>
 
-      <div className="strip-items-column">
-        <div className="strip-items">
+      {/* Scrollable ticker chips */}
+      <div className="strip-chips" role="list">
         {holdings.map(h => {
           const anim = animPcts[h.id] ?? { displayed: 0, target: 0 }
           const pct = anim.displayed
           const pctColor = pctToColor(pct, theme)
           const isFocused = focusedId === h.id
-          const isDimmed = focusedId !== null && !isFocused
+          const isDimmed  = focusedId !== null && !isFocused
 
-          // Compute hovered price if applicable
-          const sd = seriesData[h.id]
           let hoveredPrice: string | null = null
-          if (hoveredTime != null && sd?.openPrice != null && sd.points.length > 0) {
-            const hovPct = nearestPct(sd.points, hoveredTime)
-            if (hovPct !== null) {
-              const price = sd.openPrice * (1 + hovPct / 100)
-              hoveredPrice = formatPrice(price, sd.currency)
+          if (hoveredTime != null) {
+            const sd = seriesData[h.id]
+            if (sd?.openPrice != null && sd.points.length > 0) {
+              const hovPct = nearestPct(sd.points, hoveredTime)
+              if (hovPct !== null) {
+                hoveredPrice = formatPrice(sd.openPrice * (1 + hovPct / 100), sd.currency)
+              }
             }
           }
 
@@ -334,131 +321,119 @@ export default function BottomStrip({
           return (
             <div
               key={h.id}
-              className={`strip-item ${isFocused ? 'focused' : ''} ${isDimmed ? 'dimmed' : ''}`}
+              role="listitem"
+              className={`strip-chip${isFocused ? ' focused' : ''}${isDimmed ? ' dimmed' : ''}`}
               onClick={() => onFocus(h.id)}
-              title={errMsg ? `Data: ${errMsg}` : undefined}
+              title={errMsg ? `Data error: ${errMsg}` : undefined}
             >
-              <div className="swatch-wrap">
-                <button
-                  type="button"
-                  className={`swatch${stylePickerId === h.id ? ' swatch--open' : ''}`}
-                  style={{ background: h.gradientColors?.length
+              {/* Color swatch — opens line appearance picker */}
+              <button
+                type="button"
+                className={`swatch${stylePickerId === h.id ? ' swatch--open' : ''}`}
+                style={{
+                  background: h.gradientColors?.length
                     ? `linear-gradient(to right, ${[h.color, ...h.gradientColors].join(', ')})`
-                    : h.color
-                  }}
-                  ref={el => { swatchRefs.current[h.id] = el }}
-                  onClick={e => {
-                    e.stopPropagation()
-                    const btn = swatchRefs.current[h.id]
-                    if (btn) openLineAppearance(h.id, btn)
-                  }}
-                  aria-label={`Line and colour for ${h.ticker}`}
-                  aria-expanded={stylePickerId === h.id}
-                  title="Line & colour"
-                />
-              </div>
+                    : h.color,
+                }}
+                ref={el => { swatchRefs.current[h.id] = el }}
+                onClick={e => {
+                  e.stopPropagation()
+                  const btn = swatchRefs.current[h.id]
+                  if (btn) openLineAppearance(h.id, btn)
+                }}
+                aria-label={`Line appearance for ${h.ticker}`}
+                aria-expanded={stylePickerId === h.id}
+                title="Line & colour"
+              />
 
-              <span className="strip-ticker">{h.ticker}</span>
-              <span className="strip-exchange">{h.exchange}</span>
+              <span className="chip-ticker">{h.ticker}</span>
+              <span className="chip-exch">{h.exchange}</span>
 
-              <div className="strip-pct-wrap">
-                <span className="strip-pct" style={{ color: pctColor }}>
-                  {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
-                </span>
+              {/* % and hover price always on same line — no height change */}
+              <span className="chip-pct" style={{ color: pctColor }}>
+                {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
                 {hoveredPrice && (
-                  <span className="strip-price">{hoveredPrice}</span>
+                  <span className="chip-price"> · {hoveredPrice}</span>
                 )}
-              </div>
+              </span>
 
               <button
-                className="strip-remove"
+                className="chip-remove"
                 onClick={e => { e.stopPropagation(); onRemove(h.id) }}
                 aria-label={`Remove ${h.ticker}`}
+                tabIndex={-1}
               >
                 ×
               </button>
             </div>
           )
         })}
-        </div>
-        {!pctFootnoteHidden ? (
-          <div className="strip-pct-footnote-row">
-            <p className="strip-pct-footnote" title={pctNote.title}>
-              {pctNote.text}
-            </p>
-            <button
-              type="button"
-              className="strip-pct-footnote-dismiss"
-              onClick={() => onPctFootnoteHiddenChange(true)}
-              aria-label="Hide percentage explanation"
-              title="Hide explanation"
-            >
-              ×
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            className="strip-pct-footnote-show"
-            onClick={() => onPctFootnoteHiddenChange(false)}
-            aria-expanded={false}
-            aria-label="Show percentage explanation"
-            title="Show how percentages are calculated"
-          >
-            Explain %
-          </button>
-        )}
       </div>
 
-      {/* Add input */}
-      <div className={`strip-add${holdings.length === 0 ? ' strip-add--empty-hint' : ''}`}>
-        <div className="strip-search-wrap" ref={inputWrapRef}>
+      {/* % info tooltip — no inline footnote row; strip stays single-height */}
+      {!isEmpty && (
+        <button
+          type="button"
+          className="strip-info"
+          title={tooltipText}
+          aria-label="About percentage changes"
+        >
+          ?
+        </button>
+      )}
+
+      {/* Add ticker input with inline dropdown (no portal, no position calculation) */}
+      <div className={`strip-add${isEmpty ? ' strip-add--hint' : ''}`}>
+        <div className="strip-search-wrap">
           <input
             ref={inputRef}
             className="strip-input"
-            placeholder="Add ticker…"
+            placeholder={isEmpty ? 'Add a ticker to get started…' : 'Add ticker…'}
             value={addInput}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            onFocus={() => { if (searchResults.length > 0) { setSearchOpen(true); searchAnchor.open() } }}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
             maxLength={16}
             autoComplete="off"
+            autoCapitalize="characters"
             spellCheck={false}
+            aria-label="Search for a ticker"
+            aria-autocomplete="list"
+            aria-expanded={searchOpen}
+            aria-haspopup="listbox"
           />
-          {searchLoading && <span className="strip-search-spinner" />}
+
+          {searchLoading && <span className="strip-search-spinner" aria-hidden />}
+
+          {/* Dropdown — absolute within strip-search-wrap, above the strip */}
+          {searchOpen && searchResults.length > 0 && (
+            <div
+              className="strip-dropdown"
+              ref={dropdownRef}
+              role="listbox"
+              aria-label="Search results"
+            >
+              {searchResults.map((r, i) => (
+                <button
+                  key={r.symbol}
+                  role="option"
+                  aria-selected={i === highlightedIdx}
+                  className={`strip-dropdown-item${i === highlightedIdx ? ' highlighted' : ''}`}
+                  onMouseDown={e => { e.preventDefault(); selectResult(r) }}
+                  onMouseEnter={() => setHighlightedIdx(i)}
+                >
+                  <span className="sd-symbol">{r.symbol}</span>
+                  <span className="sd-name">{r.name}</span>
+                  <span className="sd-exchange">{r.exchange}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Portalled: search dropdown — right-anchored to input right edge */}
-      {searchOpen && searchResults.length > 0 && searchAnchor.pos && (
-        <Portal>
-          <div
-            className="portal-popup strip-dropdown"
-            ref={dropdownRef}
-            style={{
-              position: 'fixed',
-              bottom: searchAnchor.pos.bottom,
-              right: searchAnchor.pos.right,
-              zIndex: 9999,
-            }}
-          >
-            {searchResults.map((r, i) => (
-              <button
-                key={r.symbol}
-                className={`strip-dropdown-item ${i === highlightedIdx ? 'highlighted' : ''}`}
-                onMouseDown={e => { e.preventDefault(); selectResult(r) }}
-                onMouseEnter={() => setHighlightedIdx(i)}
-              >
-                <span className="sd-symbol">{r.symbol}</span>
-                <span className="sd-name">{r.name}</span>
-                <span className="sd-exchange">{r.exchange}</span>
-              </button>
-            ))}
-          </div>
-        </Portal>
-      )}
-
-      {/* Portalled: line appearance (colour, gradient, stroke, thickness) */}
+      {/* Line-appearance portal (needs to float above the chart canvas) */}
       {stylePickerId && stylePopup.pos && (() => {
         const h = holdings.find(hh => hh.id === stylePickerId)
         if (!h) return null

@@ -20,10 +20,25 @@ export default function FearGreed({ leadingSlot }: Props) {
     try {
       const res = await fetch('/api/feargreed')
       if (!res.ok) throw new Error('bad response')
-      const json = await res.json()
-      setData(json)
+      const json: unknown = await res.json()
+      if (
+        !json ||
+        typeof json !== 'object' ||
+        typeof (json as FGData).score !== 'number' ||
+        !Number.isFinite((json as FGData).score)
+      ) {
+        setData(null)
+        setError(true)
+        return
+      }
+      const row = json as FGData
+      setData({
+        score: row.score,
+        rating: typeof row.rating === 'string' ? row.rating : String(row.rating ?? ''),
+      })
       setError(false)
     } catch {
+      setData(null)
       setError(true)
     }
   }
