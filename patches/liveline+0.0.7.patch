@@ -1,5 +1,5 @@
 diff --git a/node_modules/liveline/dist/index.cjs b/node_modules/liveline/dist/index.cjs
-index 4709730..3b0df79 100644
+index 4709730..f48eab8 100644
 --- a/node_modules/liveline/dist/index.cjs
 +++ b/node_modules/liveline/dist/index.cjs
 @@ -387,7 +387,7 @@ function blendColor(c1, c2, t) {
@@ -218,6 +218,15 @@ index 4709730..3b0df79 100644
      { text: "  \xB7  ", color: palette.gridLabel },
      { text: time, color: palette.gridLabel }
    ];
+@@ -1572,7 +1664,7 @@ function drawFrame(ctx, layout, palette, opts) {
+     const lastPt = pts[pts.length - 1];
+     const distToLive = lastPt[0] - opts.hoverX;
+     const fadeStart = Math.min(80, layout.chartW * 0.3);
+-    const scrubOpacity = distToLive < CROSSHAIR_FADE_MIN_PX ? 0 : distToLive >= fadeStart ? opts.scrubAmount : (distToLive - CROSSHAIR_FADE_MIN_PX) / (fadeStart - CROSSHAIR_FADE_MIN_PX) * opts.scrubAmount;
++    const scrubOpacity = opts.scrubAmount;
+     if (scrubOpacity > 0.01) {
+       drawCrosshair(
+         ctx,
 @@ -1627,6 +1719,9 @@ function drawMultiFrame(ctx, layout, opts) {
      if (combinedAlpha < 0.01) continue;
      ctx.save();
@@ -243,6 +252,15 @@ index 4709730..3b0df79 100644
      );
      ctx.restore();
      if (pts && pts.length > 0) {
+@@ -1694,7 +1795,7 @@ function drawMultiFrame(ctx, layout, opts) {
+     }
+     const distToLive = maxLiveDotX - opts.hoverX;
+     const fadeStart = Math.min(80, layout.chartW * 0.3);
+-    const scrubOpacity = distToLive < CROSSHAIR_FADE_MIN_PX ? 0 : distToLive >= fadeStart ? opts.scrubAmount : (distToLive - CROSSHAIR_FADE_MIN_PX) / (fadeStart - CROSSHAIR_FADE_MIN_PX) * opts.scrubAmount;
++    const scrubOpacity = opts.scrubAmount;
+     if (scrubOpacity > 0.01) {
+       drawMultiCrosshair(
+         ctx,
 @@ -1990,8 +2091,8 @@ var VALUE_SNAP_THRESHOLD = 1e-3;
  var ADAPTIVE_SPEED_BOOST = 0.2;
  var MOMENTUM_GREEN = [34, 197, 94];
@@ -397,7 +415,7 @@ index 414c4e6..ab5ea15 100644
      style?: CSSProperties;
  }
 diff --git a/node_modules/liveline/dist/index.js b/node_modules/liveline/dist/index.js
-index fd05062..191fec7 100644
+index fd05062..c79d533 100644
 --- a/node_modules/liveline/dist/index.js
 +++ b/node_modules/liveline/dist/index.js
 @@ -360,7 +360,7 @@ function blendColor(c1, c2, t) {
@@ -616,6 +634,15 @@ index fd05062..191fec7 100644
      { text: "  \xB7  ", color: palette.gridLabel },
      { text: time, color: palette.gridLabel }
    ];
+@@ -1545,7 +1637,7 @@ function drawFrame(ctx, layout, palette, opts) {
+     const lastPt = pts[pts.length - 1];
+     const distToLive = lastPt[0] - opts.hoverX;
+     const fadeStart = Math.min(80, layout.chartW * 0.3);
+-    const scrubOpacity = distToLive < CROSSHAIR_FADE_MIN_PX ? 0 : distToLive >= fadeStart ? opts.scrubAmount : (distToLive - CROSSHAIR_FADE_MIN_PX) / (fadeStart - CROSSHAIR_FADE_MIN_PX) * opts.scrubAmount;
++    const scrubOpacity = opts.scrubAmount;
+     if (scrubOpacity > 0.01) {
+       drawCrosshair(
+         ctx,
 @@ -1600,6 +1692,9 @@ function drawMultiFrame(ctx, layout, opts) {
      if (combinedAlpha < 0.01) continue;
      ctx.save();
@@ -641,6 +668,15 @@ index fd05062..191fec7 100644
      );
      ctx.restore();
      if (pts && pts.length > 0) {
+@@ -1667,7 +1768,7 @@ function drawMultiFrame(ctx, layout, opts) {
+     }
+     const distToLive = maxLiveDotX - opts.hoverX;
+     const fadeStart = Math.min(80, layout.chartW * 0.3);
+-    const scrubOpacity = distToLive < CROSSHAIR_FADE_MIN_PX ? 0 : distToLive >= fadeStart ? opts.scrubAmount : (distToLive - CROSSHAIR_FADE_MIN_PX) / (fadeStart - CROSSHAIR_FADE_MIN_PX) * opts.scrubAmount;
++    const scrubOpacity = opts.scrubAmount;
+     if (scrubOpacity > 0.01) {
+       drawMultiCrosshair(
+         ctx,
 @@ -1963,8 +2064,8 @@ var VALUE_SNAP_THRESHOLD = 1e-3;
  var ADAPTIVE_SPEED_BOOST = 0.2;
  var MOMENTUM_GREEN = [34, 197, 94];

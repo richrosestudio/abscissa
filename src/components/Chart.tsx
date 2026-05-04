@@ -44,6 +44,12 @@ interface MarketZone {
   color: string
 }
 
+interface SessionMarker {
+  kind: 'open' | 'close'
+  /** 0–1 horizontal position within plot width (same basis as MarketZone.left) */
+  left: number
+}
+
 const WINDOW_NO_TSE_H = 13  // 08:00–21:00
 const WINDOW_TSE_H    = 21  // 00:00–21:00
 
@@ -301,6 +307,53 @@ function computeZones(
   }))
 }
 
+function computeSessionMarkers(
+  hasLSE: boolean,
+  hasUS: boolean,
+  hasTSE: boolean,
+  selectedExchange: Exchange | null,
+  leftEdge: number,
+  plotRightEdge: number,
+  liveTimeSec: number,
+): SessionMarker[] {
+  if (!hasLSE && !hasUS && !hasTSE && !selectedExchange) return []
+
+  const zoneEnd = Math.min(plotRightEdge, liveTimeSec)
+  if (!(zoneEnd > leftEdge)) return []
+
+  const activeExchanges: Exchange[] = selectedExchange
+    ? [selectedExchange]
+    : [
+        ...(hasLSE ? (['LSE'] as const) : []),
+        ...(hasUS  ? (['US'] as const)  : []),
+        ...(hasTSE ? (['TSE'] as const) : []),
+      ]
+
+  const openIntervals = mergeIntervals(
+    activeExchanges.flatMap(exchange => getOpenIntervalsForExchange(exchange, leftEdge, zoneEnd)),
+  )
+
+  const windowWidth = plotRightEdge - leftEdge
+  const markers: SessionMarker[] = []
+
+  for (const interval of openIntervals) {
+    if (interval.start >= leftEdge && interval.start <= zoneEnd) {
+      markers.push({
+        kind: 'open',
+        left: (interval.start - leftEdge) / windowWidth,
+      })
+    }
+    if (interval.end >= leftEdge && interval.end <= zoneEnd) {
+      markers.push({
+        kind: 'close',
+        left: (interval.end - leftEdge) / windowWidth,
+      })
+    }
+  }
+
+  return markers
+}
+
 export default function Chart({ holdings, seriesData, focusedId, theme, onHoverTime, selectedExchange, timeRange = '1D', loading = false }: Props) {
   const prevPcts = useRef<Record<string, number>>({})
   const [refLineGlow, setRefLineGlow] = useState(false)
@@ -405,10 +458,14 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
   }, [windowSecs, timeRange])
 
   // Double-click anywhere on the chart resets both zoom and Y-axis pan
-  const handleDoubleClick = useCallback(() => {
+  const resetChartView = useCallback(() => {
     setUserWindowSecs(null)
     setYDomainOverride(null)
   }, [])
+
+  const handleDoubleClick = useCallback(() => {
+    resetChartView()
+  }, [resetChartView])
 
   // Y-axis drag — pointer capture keeps tracking smooth even if cursor leaves the overlay
   const handleYAxisPointerDown = useCallback((e: React.PointerEvent) => {
@@ -534,6 +591,22 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
     [isIntraday, hasLSE, hasUS, hasTSE, selectedExchange, visibleWindow, zoneLiveMs],
   )
 
+  const sessionMarkers = useMemo(
+    () =>
+      isIntraday
+        ? computeSessionMarkers(
+            hasLSE,
+            hasUS,
+            hasTSE,
+            selectedExchange ?? null,
+            visibleWindow.leftEdge,
+            visibleWindow.rightEdge,
+            zoneLiveMs / 1000,
+          )
+        : [],
+    [isIntraday, hasLSE, hasUS, hasTSE, selectedExchange, visibleWindow, zoneLiveMs],
+  )
+
   // Replicate Liveline's internal labelReserve calculation so the zone overlay
   // stays aligned with the actual chart plotting area.
   // Liveline uses: chartW = w - pad.left - pad.right - labelReserve
@@ -592,12 +665,25 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
     }
   }, [timeRange, selectedExchange])
 
+  const isEmpty = holdings.length === 0
+  const showResetView =
+    !isEmpty && (userWindowSecs != null || yDomainOverride != null)
+
   return (
     <div className="chart-wrapper" onDoubleClick={handleDoubleClick}>
       <div className={`ref-line-glow ${refLineGlow ? 'active' : ''}`} />
+      {isEmpty && (
+        <div className="chart-empty-state" aria-live="polite">
+          <p className="chart-empty-state__title">No tickers yet</p>
+          <p className="chart-empty-state__hint">
+            Add a symbol using <span className="chart-empty-state__kbd">Add ticker…</span> at the
+            bottom right.
+          </p>
+        </div>
+      )}
       <div
         ref={containerRef}
-        className={`liveline-container${loading && hasData ? ' liveline-container--loading' : ''}`}
+        className={`liveline-container${loading && hasData ? ' liveline-container--loading' : ''}${isEmpty ? ' liveline-container--empty' : ''}`}
       >
         <Liveline
           data={[]}
@@ -637,6 +723,13 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
                 }}
               />
             ))}
+            {sessionMarkers.map((m, i) => (
+              <div
+                key={`${m.kind}-${i}-${m.left.toFixed(6)}`}
+                className={`market-session-marker market-session-marker--${m.kind}`}
+                style={{ left: `${(m.left * 100).toFixed(4)}%` }}
+              />
+            ))}
           </div>
         )}
         {/* Y-axis drag overlay — covers Liveline's right-hand axis strip */}
@@ -647,6 +740,29 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
           onPointerUp={handleYAxisPointerUp}
         />
       </div>
+      {showResetView && (
+        <button
+          type="button"
+          className="chart-reset-view"
+          onClick={e => {
+            e.stopPropagation()
+            resetChartView()
+          }}
+          aria-label="Reset chart zoom and vertical scale"
+          title="Reset zoom to default view (double-click chart also works)"
+        >
+          <svg className="chart-reset-view__icon" viewBox="0 0 24 24" aria-hidden>
+            <path
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
+            />
+          </svg>
+        </button>
+      )}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import type { Holding, SeriesData, Theme } from '../types'
+import type { Holding, SeriesData, Theme, TimeRange } from '../types'
 import { pctToColor } from '../utils/colors'
 import ColorPicker from './ColorPicker'
 import Portal from './Portal'
@@ -18,6 +18,7 @@ interface Props {
   onRemove: (id: string) => void
   /** Last fetch error message per holding id (hover for detail) */
   tickerErrors?: Record<string, string>
+  timeRange: TimeRange
 }
 
 /** Binary-search for the point in a sorted series closest to targetTime */
@@ -92,10 +93,25 @@ function useAnchoredPopup(anchorRef: React.RefObject<HTMLElement | null>) {
   return { pos, open: update, close: () => setPos(null) }
 }
 
+function pctBaselineFootnote(timeRange: TimeRange): { text: string; title: string } {
+  if (timeRange === '1D') {
+    return {
+      text: 'Change vs prior close pre-open, then vs session open.',
+      title:
+        'Before regular hours, change is vs the previous session close. During regular hours, vs the cash session open.',
+    }
+  }
+  return {
+    text: 'Change vs first price in range.',
+    title: 'Percent change is relative to the first valid price at the start of the selected range.',
+  }
+}
+
 export default function BottomStrip({
   holdings, seriesData, focusedId, theme, hoveredTime,
   onFocus, onResetFocus, onColorChange, onAdd, onRemove,
   tickerErrors = {},
+  timeRange,
 }: Props) {
   const [colorPickerId, setColorPickerId] = useState<string | null>(null)
   const [addInput, setAddInput] = useState('')
@@ -270,6 +286,8 @@ export default function BottomStrip({
     }
   }, [highlightedIdx])
 
+  const pctNote = pctBaselineFootnote(timeRange)
+
   return (
     <div className="strip">
       <button
@@ -285,7 +303,8 @@ export default function BottomStrip({
         ×
       </button>
 
-      <div className="strip-items">
+      <div className="strip-items-column">
+        <div className="strip-items">
         {holdings.map(h => {
           const anim = animPcts[h.id] ?? { displayed: 0, target: 0 }
           const pct = anim.displayed
@@ -349,10 +368,14 @@ export default function BottomStrip({
             </div>
           )
         })}
+        </div>
+        <p className="strip-pct-footnote" title={pctNote.title}>
+          {pctNote.text}
+        </p>
       </div>
 
       {/* Add input */}
-      <div className="strip-add">
+      <div className={`strip-add${holdings.length === 0 ? ' strip-add--empty-hint' : ''}`}>
         <div className="strip-search-wrap" ref={inputWrapRef}>
           <input
             ref={inputRef}

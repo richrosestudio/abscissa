@@ -12,20 +12,9 @@ import Splash from './components/Splash'
 import TimeRangePicker from './components/TimeRangePicker'
 import './index.css'
 
-const DEFAULT_HOLDINGS: Holding[] = [
-  { id: 'AAPL',  ticker: 'AAPL',  exchange: 'US',  color: '#6366f1' },
-  { id: 'TSLA',  ticker: 'TSLA',  exchange: 'US',  color: '#f59e0b' },
-  { id: 'NVDA',  ticker: 'NVDA',  exchange: 'US',  color: '#10b981' },
-  { id: 'VOD.L', ticker: 'VOD.L', exchange: 'LSE', color: '#ef4444' },
-  { id: 'BP.L',  ticker: 'BP.L',  exchange: 'LSE', color: '#3b82f6' },
-]
-
 export default function App() {
   const [theme, setTheme] = useState<Theme>(() => loadTheme())
-  const [holdings, setHoldings] = useState<Holding[]>(() => {
-    const saved = loadHoldings()
-    return saved.length > 0 ? saved : DEFAULT_HOLDINGS
-  })
+  const [holdings, setHoldings] = useState<Holding[]>(() => loadHoldings())
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [hoveredTime, setHoveredTime] = useState<number | null>(null)
   const [selectedExchange, setSelectedExchange] = useState<Exchange | null>('US')
@@ -159,6 +148,7 @@ export default function App() {
         onAdd={addHolding}
         onRemove={removeHolding}
         tickerErrors={perTickerErrors}
+        timeRange={selectedRange}
       />
     </div>
   )
