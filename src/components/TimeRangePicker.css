@@ -88,3 +88,23 @@
   margin: 0 4px;
   flex-shrink: 0;
 }
+
+/* Chart view reset — circular arrow, inline with range tabs */
+.trp-btn--reset {
+  padding: 3px 5px;
+}
+
+.trp-btn--reset:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.trp-btn--reset:not(:disabled):hover {
+  color: var(--text-muted);
+}
+
+.trp-reset-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+}

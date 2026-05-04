@@ -1,1 +1,24 @@
 .vercel
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Local env
+.env
+.env.local
+.env.*.local
+
+# Logs / OS
+*.log
+.DS_Store
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# TypeScript / Vite
+*.tsbuildinfo

@@ -6,7 +6,7 @@ import { loadHoldings, saveHoldings, loadTheme, saveTheme, loadPctFootnoteHidden
 import { updateFavicon } from './utils/favicon'
 import { useIntradayData } from './hooks/useIntradayData'
 import Header from './components/Header'
-import Chart from './components/Chart'
+import Chart, { type ChartRef } from './components/Chart'
 import BottomStrip from './components/BottomStrip'
 import Splash from './components/Splash'
 import TimeRangePicker from './components/TimeRangePicker'
@@ -19,6 +19,13 @@ export default function App() {
   const [hoveredTime, setHoveredTime] = useState<number | null>(null)
   const [selectedExchange, setSelectedExchange] = useState<Exchange | null>('US')
   const [selectedRange, setSelectedRange] = useState<TimeRange>('1D')
+  const chartRef = useRef<ChartRef | null>(null)
+  const [chartCanReset, setChartCanReset] = useState(false)
+
+  const onCanResetChange = useCallback((can: boolean) => {
+    setChartCanReset(can)
+  }, [])
+
   const [pctFootnoteHidden, setPctFootnoteHidden] = useState(() => loadPctFootnoteHidden())
 
   const toggleExchange = (exchange: Exchange) =>
@@ -134,6 +141,7 @@ export default function App() {
       )}
       <main className="main">
         <Chart
+          ref={chartRef}
           holdings={holdings}
           seriesData={seriesData}
           focusedId={focusedId}
@@ -142,8 +150,14 @@ export default function App() {
           selectedExchange={selectedExchange}
           timeRange={selectedRange}
           loading={loading}
+          onCanResetChange={onCanResetChange}
         />
-        <TimeRangePicker value={selectedRange} onChange={setSelectedRange} />
+        <TimeRangePicker
+          value={selectedRange}
+          onChange={setSelectedRange}
+          chartCanReset={chartCanReset}
+          onChartReset={() => chartRef.current?.resetView()}
+        />
       </main>
       <BottomStrip
         holdings={holdings}

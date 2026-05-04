@@ -4,7 +4,7 @@
   align-items: center;
   column-gap: 16px;
   padding: 0 24px;
-  height: 88px;
+  height: 60px;
   background: var(--header-bg);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
@@ -13,7 +13,7 @@
 }
 
 .header-wordmark {
-  height: 42px;
+  height: 30px;
   width: auto;
   display: block;
   flex-shrink: 0;

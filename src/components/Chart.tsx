@@ -1,8 +1,8 @@
-import { useMemo, useRef, useEffect, useState, useCallback } from 'react'
+import { useMemo, useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { Liveline } from 'liveline'
 import type { LivelinePoint, LivelineSeries } from 'liveline'
 import type { Exchange, Holding, SeriesData, Theme, TimeRange } from '../types'
-import { computeDataDomain, computeSymmetricDomain } from '../utils/yAxis'
+import { computeDataDomain } from '../utils/yAxis'
 import './Chart.css'
 
 
@@ -15,7 +15,7 @@ const RANGE_WINDOW_SECS: Record<TimeRange, number> = {
 }
 
 const WINDOW_ZOOM_LIMITS: Record<TimeRange, { min: number; max: number }> = {
-  '1D': { min: 3_600,       max: 46_800       },
+  '1D': { min: 3_600,       max: 32_400       },
   '1W': { min: 86_400,      max: 7 * 86_400   },
   '1M': { min: 2 * 86_400,  max: 30 * 86_400  },
   '3M': { min: 7 * 86_400,  max: 91 * 86_400  },
@@ -40,6 +40,12 @@ interface Props {
   selectedExchange?: Exchange | null
   timeRange?: TimeRange
   loading?: boolean
+  /** Fires when chart zoom / pan / Y-override state changes so UI can enable a reset control. */
+  onCanResetChange?: (canReset: boolean) => void
+}
+
+export interface ChartRef {
+  resetView: () => void
 }
 
 // Zone colours — keep closed periods quiet so open market hours remain the focus
@@ -58,7 +64,7 @@ interface SessionMarker {
   left: number
 }
 
-const WINDOW_NO_TSE_H = 13  // 08:00–21:00
+const WINDOW_NO_TSE_H = 9   // covers pre-market open through mid-session
 const WINDOW_TSE_H    = 21  // 00:00–21:00
 
 interface ExchangeSession {
@@ -355,7 +361,10 @@ function computeSessionMarkers(
   return markers
 }
 
-export default function Chart({ holdings, seriesData, focusedId, theme, onHoverTime, selectedExchange, timeRange = '1D', loading = false }: Props) {
+const Chart = forwardRef<ChartRef, Props>(function Chart(
+  { holdings, seriesData, focusedId, theme, onHoverTime, selectedExchange, timeRange = '1D', loading = false, onCanResetChange },
+  ref,
+) {
   const prevPcts = useRef<Record<string, number>>({})
   const [refLineGlow, setRefLineGlow] = useState(false)
   const [clockTick, setClockTick] = useState(() => Date.now())
@@ -539,6 +548,8 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
     panOffsetMsRef.current = 0
   }, [])
 
+  useImperativeHandle(ref, () => ({ resetView: resetChartView }), [resetChartView])
+
   const handleDoubleClick = useCallback(() => {
     resetChartView()
   }, [resetChartView])
@@ -651,9 +662,7 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
       if (timeRange === '1D' && vals.length > 0) return [0, ...vals]
       return vals
     })
-    return timeRange === '1D'
-      ? computeSymmetricDomain(allPcts)
-      : computeDataDomain(allPcts)
+    return computeDataDomain(allPcts)
   }, [holdings, seriesData, timeRange])
 
   // Keep refs fresh so drag/wheel callbacks always see current values without stale closures
@@ -756,8 +765,13 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
   }, [timeRange, selectedExchange])
 
   const isEmpty = holdings.length === 0
-  const showResetView =
-    !isEmpty && (userWindowSecs != null || yDomainOverride != null || panOffsetMs !== 0)
+
+  useEffect(() => {
+    const can =
+      holdings.length > 0 &&
+      (userWindowSecs != null || yDomainOverride != null || panOffsetMs !== 0)
+    onCanResetChange?.(can)
+  }, [holdings.length, userWindowSecs, yDomainOverride, panOffsetMs, onCanResetChange])
 
   return (
     <div className="chart-wrapper" onDoubleClick={handleDoubleClick}>
@@ -831,32 +845,11 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
           onPointerUp={handleYAxisPointerUp}
         />
       </div>
-      {showResetView && (
-        <button
-          type="button"
-          className="chart-reset-view"
-          onClick={e => {
-            e.stopPropagation()
-            resetChartView()
-          }}
-          aria-label="Reset chart zoom and vertical scale"
-          title="Reset zoom to default view (double-click chart also works)"
-        >
-          <svg className="chart-reset-view__icon" viewBox="0 0 24 24" aria-hidden>
-            <path
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
-            />
-          </svg>
-        </button>
-      )}
     </div>
   )
-}
+})
+
+export default Chart
 
 function hexToRgba(hex: string, alpha: number): string {
   // Handle shorthand hex

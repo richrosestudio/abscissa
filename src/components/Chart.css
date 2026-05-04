@@ -7,43 +7,6 @@
   padding-bottom: 8px;
 }
 
-.chart-reset-view {
-  position: absolute;
-  z-index: 6;
-  left: 14px;
-  bottom: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 5px;
-  margin: 0;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  opacity: 0.52;
-  transition: opacity 0.2s ease, background 0.2s ease, color 0.2s ease;
-}
-
-.chart-reset-view:hover,
-.chart-reset-view:focus-visible {
-  opacity: 1;
-  color: var(--text-muted);
-  background: var(--hover-bg);
-}
-
-.chart-reset-view:focus-visible {
-  outline: 2px solid var(--text-muted);
-  outline-offset: 2px;
-}
-
-.chart-reset-view__icon {
-  display: block;
-  width: 17px;
-  height: 17px;
-}
-
 .liveline-container {
   flex: 1;
   min-height: 0;

@@ -1,29 +1,4 @@
 /**
- * Compute symmetric Y-axis bounds for the chart.
- *
- * Rule (from brief):
- *   1. Find max absolute % across all visible (non-hidden) series' current data window.
- *   2. Apply a buffer of ~12.5% (within 10–15%) beyond the outermost value.
- *   3. Round UP to the nearest whole 1%, so 0% is always vertically centred.
- *
- * Returns { min: -B, max: +B } where B is a whole integer percent.
- */
-export function computeSymmetricDomain(
-  allPcts: number[],   // flat array of every visible pct value on screen
-  buffer = 0.125,      // 12.5% buffer
-  minB = 1,            // never go below ±1%
-): { min: number; max: number } {
-  if (allPcts.length === 0) return { min: -minB, max: minB }
-
-  const maxAbs = Math.max(...allPcts.map(Math.abs))
-  if (maxAbs === 0) return { min: -minB, max: minB }
-
-  const buffered = maxAbs * (1 + buffer)
-  const B = Math.max(Math.ceil(buffered), minB)
-  return { min: -B, max: B }
-}
-
-/**
  * Compute data-centred Y-axis bounds for historical ranges.
  *
  * Historical views should use the actual data range so a strongly positive

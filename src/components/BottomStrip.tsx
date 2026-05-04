@@ -128,6 +128,7 @@ export default function BottomStrip({
 
   // Line-appearance picker still uses a portal to float above the chart
   const styleAnchorRef = useRef<HTMLButtonElement | null>(null)
+  const lineAppearancePopupRef = useRef<HTMLDivElement | null>(null)
   const stylePopup = useAnchoredPopup(styleAnchorRef)
 
   // --- pct animation ---
@@ -252,22 +253,34 @@ export default function BottomStrip({
     }
   }
 
-  // Close picker on outside click
+  // Close picker on mousedown outside the floating panel and outside the active swatch
   useEffect(() => {
+    if (!stylePickerId) return
     const handler = (e: MouseEvent) => {
       const t = e.target as Node
-      const inStrip = document.querySelector('.strip')?.contains(t)
-      const inPortals = document.querySelectorAll('.portal-popup')
-      let inPortal = false
-      inPortals.forEach(p => { if (p.contains(t)) inPortal = true })
-      if (!inStrip && !inPortal) {
+      const inPopup = lineAppearancePopupRef.current?.contains(t) ?? false
+      const activeSwatch = swatchRefs.current[stylePickerId]
+      const onActiveSwatch = activeSwatch?.contains(t) ?? false
+      if (!inPopup && !onActiveSwatch) {
         setStylePickerId(null)
         stylePopup.close()
       }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [stylePopup])
+  }, [stylePickerId, stylePopup])
+
+  useEffect(() => {
+    if (!stylePickerId) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setStylePickerId(null)
+        stylePopup.close()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [stylePickerId, stylePopup])
 
   // Keyboard scroll for highlighted search item
   useEffect(() => {
@@ -440,6 +453,7 @@ export default function BottomStrip({
         return (
           <Portal>
             <div
+              ref={lineAppearancePopupRef}
               className="portal-popup"
               style={{
                 position: 'fixed',
