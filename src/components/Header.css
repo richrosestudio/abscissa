@@ -4,7 +4,9 @@
   align-items: center;
   column-gap: 16px;
   padding: 0 24px;
-  height: 60px;
+  /* Tall enough for analog face + digital labels; avoids border cutting through .clock-meta */
+  min-height: 88px;
+  box-sizing: border-box;
   background: var(--header-bg);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
@@ -13,7 +15,7 @@
 }
 
 .header-wordmark {
-  height: 30px;
+  height: 42px;
   width: auto;
   display: block;
   flex-shrink: 0;
