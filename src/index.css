@@ -60,6 +60,9 @@ body { overflow: hidden; }
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* Anchor .trp to the chart area only; without this, absolute TRP uses the viewport and overlaps BottomStrip */
+  position: relative;
+  z-index: 0;
 }
 
 /* Subtle banner shown when using mock/simulated data */

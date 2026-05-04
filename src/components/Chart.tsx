@@ -22,6 +22,15 @@ const WINDOW_ZOOM_LIMITS: Record<TimeRange, { min: number; max: number }> = {
   '1Y': { min: 30 * 86_400, max: 365 * 86_400 },
 }
 
+// Maximum seconds the user can pan back in time for each range
+const MAX_PAN_SECS: Record<TimeRange, number> = {
+  '1D': 46_800,
+  '1W': 7   * 86_400,
+  '1M': 30  * 86_400,
+  '3M': 91  * 86_400,
+  '1Y': 365 * 86_400,
+}
+
 interface Props {
   holdings: Holding[]
   seriesData: Record<string, SeriesData>
@@ -45,7 +54,6 @@ interface MarketZone {
 }
 
 interface SessionMarker {
-  kind: 'open' | 'close'
   /** 0–1 horizontal position within plot width (same basis as MarketZone.left) */
   left: number
 }
@@ -339,14 +347,7 @@ function computeSessionMarkers(
   for (const interval of openIntervals) {
     if (interval.start >= leftEdge && interval.start <= zoneEnd) {
       markers.push({
-        kind: 'open',
         left: (interval.start - leftEdge) / windowWidth,
-      })
-    }
-    if (interval.end >= leftEdge && interval.end <= zoneEnd) {
-      markers.push({
-        kind: 'close',
-        left: (interval.end - leftEdge) / windowWidth,
       })
     }
   }
@@ -365,16 +366,28 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
   const containerRef = useRef<HTMLDivElement>(null)
   const [userWindowSecs, setUserWindowSecs] = useState<number | null>(null)
   const [yDomainOverride, setYDomainOverride] = useState<{ min: number; max: number } | null>(null)
+  const [panOffsetMs, setPanOffsetMs] = useState(0)
   const dragStartY = useRef(0)
   const dragStartDomain = useRef({ min: 0, max: 0 })
   // Refs so drag/wheel callbacks always see fresh values without recreating
   const yDomainRef = useRef({ min: -1, max: 1 })
   const yDomainOverrideRef = useRef<{ min: number; max: number } | null>(null)
+  const panOffsetMsRef = useRef(0)
+  // Horizontal drag refs
+  const isDraggingRef = useRef(false)
+  const dragStartXRef = useRef(0)
+  const dragStartYChartRef = useRef(0)
+  const dragStartPanRef = useRef(0)
+  const dragStartDomainMainRef = useRef({ min: 0, max: 0 })
+  // Kept-fresh refs for pointer handlers (avoids stale closures in long-lived effects)
+  const effectiveWindowSecsRef = useRef(0)
+  const timeRangeRef = useRef<TimeRange>('1D')
 
   // Reset interaction overrides whenever the timeRange tab changes
   useEffect(() => {
     setUserWindowSecs(null)
     setYDomainOverride(null)
+    setPanOffsetMs(0)
   }, [timeRange])
 
   // Detect zero crossings on new data
@@ -421,11 +434,12 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
 
   const effectiveWindowSecs = userWindowSecs ?? windowSecs
 
-  // Non-passive wheel listener — synchronous zoom applied directly on every event (no rAF lag)
+  // Non-passive wheel + pointer drag listeners — synchronous, applied directly on every event
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const handler = (e: WheelEvent) => {
+
+    const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       const rect = el.getBoundingClientRect()
       const isOnYAxis = e.clientX > rect.right - 58  // 54px axis strip + 4px buffer
@@ -443,7 +457,6 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
       }
 
       // Pinch gesture (ctrlKey on macOS) or mouse wheel — zoom the time window
-      // Pinch deltaY is small (-5..+5); mouse wheel is larger — normalise then apply base-2 factor
       const rawDelta = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY
       const sensitivity = e.ctrlKey ? 0.008 : 0.012
       const factor = Math.pow(2, rawDelta * sensitivity)
@@ -453,14 +466,77 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
         return Math.min(max, Math.max(min, base * factor))
       })
     }
-    el.addEventListener('wheel', handler, { passive: false })
-    return () => el.removeEventListener('wheel', handler)
+
+    // Horizontal time pan + vertical Y translate on main plot area
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return
+      const rect = el.getBoundingClientRect()
+      if (e.clientX > rect.right - 58) return  // Y-axis strip — handled by its own overlay
+      e.preventDefault()
+      el.setPointerCapture(e.pointerId)
+      isDraggingRef.current = true
+      dragStartXRef.current = e.clientX
+      dragStartYChartRef.current = e.clientY
+      dragStartPanRef.current = panOffsetMsRef.current
+      dragStartDomainMainRef.current = yDomainOverrideRef.current ?? yDomainRef.current
+      el.classList.add('liveline-container--dragging')
+    }
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!el.hasPointerCapture(e.pointerId) || !isDraggingRef.current) return
+      const rect = el.getBoundingClientRect()
+      const plotWidth = rect.width - 58  // exclude Y-axis strip
+
+      // Horizontal: pan time — drag left scrolls back in time
+      const deltaXPx = e.clientX - dragStartXRef.current
+      const secsPerPx = effectiveWindowSecsRef.current / plotWidth
+      const rawPan = dragStartPanRef.current - deltaXPx * secsPerPx * 1000
+      const maxPan = MAX_PAN_SECS[timeRangeRef.current] * 1000
+      const newPan = Math.max(0, Math.min(maxPan, rawPan))
+      setPanOffsetMs(newPan)
+      panOffsetMsRef.current = newPan
+
+      // Vertical: translate Y domain — drag up shifts prices up, drag down shifts down
+      const deltaYPx = e.clientY - dragStartYChartRef.current
+      const { min, max } = dragStartDomainMainRef.current
+      const span = max - min
+      const chartH = rect.height
+      const shift = -(deltaYPx / chartH) * span
+      setYDomainOverride({ min: min + shift, max: max + shift })
+    }
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (!el.hasPointerCapture(e.pointerId)) return
+      el.releasePointerCapture(e.pointerId)
+      isDraggingRef.current = false
+      el.classList.remove('liveline-container--dragging')
+      // Snap back to live edge if pan is negligibly small
+      if (panOffsetMsRef.current < 2000) {
+        setPanOffsetMs(0)
+        panOffsetMsRef.current = 0
+      }
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    el.addEventListener('pointerdown', onPointerDown)
+    el.addEventListener('pointermove', onPointerMove)
+    el.addEventListener('pointerup', onPointerUp)
+    el.addEventListener('pointercancel', onPointerUp)
+    return () => {
+      el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('pointerdown', onPointerDown)
+      el.removeEventListener('pointermove', onPointerMove)
+      el.removeEventListener('pointerup', onPointerUp)
+      el.removeEventListener('pointercancel', onPointerUp)
+    }
   }, [windowSecs, timeRange])
 
-  // Double-click anywhere on the chart resets both zoom and Y-axis pan
+  // Double-click anywhere on the chart resets zoom, time pan and Y-axis pan
   const resetChartView = useCallback(() => {
     setUserWindowSecs(null)
     setYDomainOverride(null)
+    setPanOffsetMs(0)
+    panOffsetMsRef.current = 0
   }, [])
 
   const handleDoubleClick = useCallback(() => {
@@ -491,12 +567,13 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
   }, [])
 
   const visibleWindow = useMemo(() => {
-    const rightEdge = clockTick / 1000 + effectiveWindowSecs * LIVELINE_RIGHT_BUFFER
+    const nowSec = clockTick / 1000 - panOffsetMs / 1000
+    const rightEdge = nowSec + effectiveWindowSecs * LIVELINE_RIGHT_BUFFER
     return {
       leftEdge: rightEdge - effectiveWindowSecs,
       rightEdge,
     }
-  }, [clockTick, effectiveWindowSecs])
+  }, [clockTick, effectiveWindowSecs, panOffsetMs])
 
   // Build Liveline series array
   const series = useMemo((): LivelineSeries[] => {
@@ -521,7 +598,14 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
         const isFocused      = focusedId !== null && focusedId === h.id
 
         const color     = isDimmedByFocus ? hexToRgba(h.color, 0.07) : h.color
-        const lineWidth = focusedId === null ? undefined : isFocused ? 3 : 1
+        const thickness = h.lineThickness ?? 2
+        const lineWidth = focusedId === null
+          ? thickness
+          : isFocused ? Math.min(4, thickness + 1) : 1
+
+        const gradientStops = !isDimmedByFocus && h.gradientColors?.length
+          ? [h.color, ...h.gradientColors]
+          : undefined
 
         // Liveline dims strokes outside `sessions`; use each listing's home exchange so
         // e.g. US names stay faded on the LSE clock until NASDAQ/NYSE hours reach them on the X axis.
@@ -539,7 +623,9 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
             label: h.ticker,
             extendToNow: true,
             linear: false,
-            ...(lineWidth !== undefined ? { lineWidth } : {}),
+            lineWidth,
+            lineStyle: h.lineStyle ?? 'solid',
+            ...(gradientStops ? { gradientStops } : {}),
             ...(timeRange === '1D' && sessions != null ? { sessions } : {}),
           },
         ]
@@ -569,9 +655,12 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
       : computeDataDomain(allPcts)
   }, [holdings, seriesData, timeRange])
 
-  // Keep refs fresh so drag/wheel callbacks always see current values
+  // Keep refs fresh so drag/wheel callbacks always see current values without stale closures
   yDomainRef.current = yDomain
   yDomainOverrideRef.current = yDomainOverride
+  panOffsetMsRef.current = panOffsetMs
+  effectiveWindowSecsRef.current = effectiveWindowSecs
+  timeRangeRef.current = timeRange
 
   const hasData = series.some(s => s.data.length > 0)
 
@@ -667,7 +756,7 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
 
   const isEmpty = holdings.length === 0
   const showResetView =
-    !isEmpty && (userWindowSecs != null || yDomainOverride != null)
+    !isEmpty && (userWindowSecs != null || yDomainOverride != null || panOffsetMs !== 0)
 
   return (
     <div className="chart-wrapper" onDoubleClick={handleDoubleClick}>
@@ -688,15 +777,16 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
         <Liveline
           data={[]}
           value={0}
-          series={series}
+          series={panOffsetMs > 0 ? series.map(s => ({ ...s, extendToNow: false })) : series}
           theme={theme}
           referenceLine={{ value: 0 }}
           formatValue={v => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`}
           formatTime={formatTime}
           window={effectiveWindowSecs}
+          nowOffset={panOffsetMs / 1000}
           grid
           scrub
-          pulse={isIntraday}
+          pulse={isIntraday && panOffsetMs === 0}
           loading={false}
           onHover={pt => onHoverTime?.(pt ? pt.time : null)}
           badge={false}
@@ -725,8 +815,8 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
             ))}
             {sessionMarkers.map((m, i) => (
               <div
-                key={`${m.kind}-${i}-${m.left.toFixed(6)}`}
-                className={`market-session-marker market-session-marker--${m.kind}`}
+                key={`session-open-${i}-${m.left.toFixed(6)}`}
+                className="market-session-marker"
                 style={{ left: `${(m.left * 100).toFixed(4)}%` }}
               />
             ))}

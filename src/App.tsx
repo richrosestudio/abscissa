@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
-import type { Exchange, Holding, Theme, TimeRange } from './types'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import type { Exchange, Holding, LineStyle, Theme, TimeRange } from './types'
 import { detectExchange, normalizeId } from './utils/exchange'
 import { nextColor } from './utils/colors'
-import { loadHoldings, saveHoldings, loadTheme, saveTheme } from './utils/storage'
+import { loadHoldings, saveHoldings, loadTheme, saveTheme, loadPctFootnoteHidden, savePctFootnoteHidden } from './utils/storage'
 import { updateFavicon } from './utils/favicon'
 import { useIntradayData } from './hooks/useIntradayData'
 import Header from './components/Header'
@@ -19,6 +19,7 @@ export default function App() {
   const [hoveredTime, setHoveredTime] = useState<number | null>(null)
   const [selectedExchange, setSelectedExchange] = useState<Exchange | null>('US')
   const [selectedRange, setSelectedRange] = useState<TimeRange>('1D')
+  const [pctFootnoteHidden, setPctFootnoteHidden] = useState(() => loadPctFootnoteHidden())
 
   const toggleExchange = (exchange: Exchange) =>
     setSelectedExchange(prev => prev === exchange ? null : exchange)
@@ -30,6 +31,7 @@ export default function App() {
   // Persist
   useEffect(() => { saveTheme(theme) }, [theme])
   useEffect(() => { saveHoldings(holdings) }, [holdings])
+  useEffect(() => { savePctFootnoteHidden(pctFootnoteHidden) }, [pctFootnoteHidden])
 
   // Apply theme class to root
   useEffect(() => {
@@ -99,6 +101,13 @@ export default function App() {
     setHoldings(prev => prev.map(h => h.id === id ? { ...h, color } : h))
   }
 
+  const updateStyle = useCallback(
+    (id: string, patch: Partial<Pick<Holding, 'lineStyle' | 'lineThickness' | 'gradientColors'>>) => {
+      setHoldings(prev => prev.map(h => h.id === id ? { ...h, ...patch } : h))
+    },
+    [],
+  )
+
   const toggleFocus = (id: string) => {
     setFocusedId(prev => prev === id ? null : id)
   }
@@ -145,10 +154,13 @@ export default function App() {
         onFocus={toggleFocus}
         onResetFocus={() => setFocusedId(null)}
         onColorChange={updateColor}
+        onStyleChange={updateStyle}
         onAdd={addHolding}
         onRemove={removeHolding}
         tickerErrors={perTickerErrors}
         timeRange={selectedRange}
+        pctFootnoteHidden={pctFootnoteHidden}
+        onPctFootnoteHiddenChange={setPctFootnoteHidden}
       />
     </div>
   )

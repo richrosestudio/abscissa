@@ -1,5 +1,6 @@
 .strip {
   position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   padding: 5px 16px;
@@ -22,14 +23,78 @@
   gap: 2px;
 }
 
+.strip-pct-footnote-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
 .strip-pct-footnote {
   margin: 0;
+  flex: 1;
+  min-width: 0;
   font-size: 11px;
   line-height: 1.35;
   color: var(--text-muted);
   letter-spacing: 0.01em;
   user-select: none;
   white-space: normal;
+}
+
+.strip-pct-footnote-dismiss {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.strip-pct-footnote-dismiss:hover {
+  color: var(--text-muted);
+  background: var(--hover-bg);
+}
+
+.strip-pct-footnote-dismiss:focus-visible {
+  outline: 2px solid var(--text-muted);
+  outline-offset: 1px;
+}
+
+.strip-pct-footnote-show {
+  align-self: flex-start;
+  margin: 0;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.strip-pct-footnote-show:hover {
+  color: var(--text-muted);
+}
+
+.strip-pct-footnote-show:focus-visible {
+  outline: 2px solid var(--text-muted);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* ---------- items list ---------- */
@@ -93,7 +158,13 @@
 .strip-item.dimmed { opacity: 0.35; }
 
 /* ---------- swatch ---------- */
-.swatch-wrap { position: relative; }
+.swatch-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
 
 .swatch {
   width: 11px;
@@ -111,6 +182,33 @@
 .swatch:hover {
   transform: scale(1.3);
   box-shadow: 0 0 0 2px var(--border);
+}
+
+.strip-style-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 12px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.strip-style-btn:hover {
+  color: var(--text);
+  background: var(--hover-bg);
+}
+
+.strip-style-btn.active {
+  color: var(--text);
+  background: var(--hover-bg);
 }
 
 /* ---------- strip text ---------- */

@@ -1,10 +1,15 @@
 export type Exchange = 'LSE' | 'US' | 'TSE'
 
+export type LineStyle = 'solid' | 'dashed' | 'dotted'
+
 export interface Holding {
   id: string        // e.g. "AAPL" or "VOD.L"
   ticker: string    // display ticker
   exchange: Exchange
   color: string
+  gradientColors?: [string, string] | [string, string, string]
+  lineStyle?: LineStyle
+  lineThickness?: number  // 1–4
 }
 
 export interface SeriesPoint {

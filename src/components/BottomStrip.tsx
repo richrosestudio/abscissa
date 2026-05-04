@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { Holding, SeriesData, Theme, TimeRange } from '../types'
 import { pctToColor } from '../utils/colors'
 import ColorPicker from './ColorPicker'
+import LineStylePicker from './LineStylePicker'
 import Portal from './Portal'
 import './BottomStrip.css'
 
@@ -14,11 +15,14 @@ interface Props {
   onFocus: (id: string) => void
   onResetFocus?: () => void
   onColorChange: (id: string, color: string) => void
+  onStyleChange: (id: string, patch: Partial<Pick<Holding, 'lineStyle' | 'lineThickness' | 'gradientColors'>>) => void
   onAdd: (ticker: string) => void
   onRemove: (id: string) => void
   /** Last fetch error message per holding id (hover for detail) */
   tickerErrors?: Record<string, string>
   timeRange: TimeRange
+  pctFootnoteHidden: boolean
+  onPctFootnoteHiddenChange: (hidden: boolean) => void
 }
 
 /** Binary-search for the point in a sorted series closest to targetTime */
@@ -96,7 +100,7 @@ function useAnchoredPopup(anchorRef: React.RefObject<HTMLElement | null>) {
 function pctBaselineFootnote(timeRange: TimeRange): { text: string; title: string } {
   if (timeRange === '1D') {
     return {
-      text: "Today's %: vs yesterday's close before the open, then vs today's open once trading starts.",
+      text: "% change vs yesterday's close pre-market, then vs today's open once trading starts.",
       title:
         'Extended hours use the previous closing price as the baseline. Regular trading hours use the official opening price for that session.',
     }
@@ -110,16 +114,20 @@ function pctBaselineFootnote(timeRange: TimeRange): { text: string; title: strin
 
 export default function BottomStrip({
   holdings, seriesData, focusedId, theme, hoveredTime,
-  onFocus, onResetFocus, onColorChange, onAdd, onRemove,
+  onFocus, onResetFocus, onColorChange, onStyleChange, onAdd, onRemove,
   tickerErrors = {},
   timeRange,
+  pctFootnoteHidden,
+  onPctFootnoteHiddenChange,
 }: Props) {
   const [colorPickerId, setColorPickerId] = useState<string | null>(null)
+  const [stylePickerId, setStylePickerId] = useState<string | null>(null)
   const [addInput, setAddInput] = useState('')
   const [animPcts, setAnimPcts] = useState<Record<string, AnimatedPct>>({})
   const rafRef = useRef<number | null>(null)
   const animPctsRef = useRef<Record<string, AnimatedPct>>({})
   const swatchRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const styleBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
   // Search state
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
@@ -137,6 +145,10 @@ export default function BottomStrip({
   // Portal position for colour picker
   const colorAnchorRef = useRef<HTMLButtonElement | null>(null)
   const colorPopup = useAnchoredPopup(colorAnchorRef)
+
+  // Portal position for line style picker
+  const styleAnchorRef = useRef<HTMLButtonElement | null>(null)
+  const stylePopup = useAnchoredPopup(styleAnchorRef)
 
   // Sync pct animation targets
   useEffect(() => {
@@ -256,6 +268,23 @@ export default function BottomStrip({
       setColorPickerId(id)
       colorAnchorRef.current = btn
       colorPopup.open()
+      // Close style picker if open
+      setStylePickerId(null)
+      stylePopup.close()
+    }
+  }
+
+  const openStylePicker = (id: string, btn: HTMLButtonElement) => {
+    if (stylePickerId === id) {
+      setStylePickerId(null)
+      stylePopup.close()
+    } else {
+      setStylePickerId(id)
+      styleAnchorRef.current = btn
+      stylePopup.open()
+      // Close colour picker if open
+      setColorPickerId(null)
+      colorPopup.close()
     }
   }
 
@@ -271,13 +300,15 @@ export default function BottomStrip({
       if (!inStrip && !inPortal) {
         setColorPickerId(null)
         colorPopup.close()
+        setStylePickerId(null)
+        stylePopup.close()
         setSearchOpen(false)
         searchAnchor.close()
       }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [colorPopup, searchAnchor])
+  }, [colorPopup, stylePopup, searchAnchor])
 
   // Scroll highlighted item into view
   useEffect(() => {
@@ -336,7 +367,10 @@ export default function BottomStrip({
               <div className="swatch-wrap">
                 <button
                   className="swatch"
-                  style={{ background: h.color }}
+                  style={{ background: h.gradientColors?.length
+                    ? `linear-gradient(to right, ${[h.color, ...h.gradientColors].join(', ')})`
+                    : h.color
+                  }}
                   ref={el => { swatchRefs.current[h.id] = el }}
                   onClick={e => {
                     e.stopPropagation()
@@ -345,6 +379,23 @@ export default function BottomStrip({
                   }}
                   aria-label={`Change colour for ${h.ticker}`}
                 />
+                <button
+                  className={`strip-style-btn ${stylePickerId === h.id ? 'active' : ''}`}
+                  ref={el => { styleBtnRefs.current[h.id] = el }}
+                  onClick={e => {
+                    e.stopPropagation()
+                    const btn = styleBtnRefs.current[h.id]
+                    if (btn) openStylePicker(h.id, btn)
+                  }}
+                  aria-label={`Line style for ${h.ticker}`}
+                  title="Line style"
+                >
+                  <svg viewBox="0 0 12 10" width="12" height="10" fill="none" stroke="currentColor" strokeLinecap="round" aria-hidden>
+                    <line x1="1" y1="2"  x2="11" y2="2"  strokeWidth="1.5" />
+                    <line x1="1" y1="5"  x2="11" y2="5"  strokeWidth="1"   strokeDasharray="2 1.5" />
+                    <line x1="1" y1="8"  x2="11" y2="8"  strokeWidth="0.75" strokeDasharray="0.5 2" />
+                  </svg>
+                </button>
               </div>
 
               <span className="strip-ticker">{h.ticker}</span>
@@ -370,9 +421,33 @@ export default function BottomStrip({
           )
         })}
         </div>
-        <p className="strip-pct-footnote" title={pctNote.title}>
-          {pctNote.text}
-        </p>
+        {!pctFootnoteHidden ? (
+          <div className="strip-pct-footnote-row">
+            <p className="strip-pct-footnote" title={pctNote.title}>
+              {pctNote.text}
+            </p>
+            <button
+              type="button"
+              className="strip-pct-footnote-dismiss"
+              onClick={() => onPctFootnoteHiddenChange(true)}
+              aria-label="Hide percentage explanation"
+              title="Hide explanation"
+            >
+              ×
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="strip-pct-footnote-show"
+            onClick={() => onPctFootnoteHiddenChange(false)}
+            aria-expanded={false}
+            aria-label="Show percentage explanation"
+            title="Show how percentages are calculated"
+          >
+            Explain %
+          </button>
+        )}
       </div>
 
       {/* Add input */}
@@ -442,6 +517,30 @@ export default function BottomStrip({
           </div>
         </Portal>
       )}
+
+      {/* Portalled: line style picker — left-anchored to style button */}
+      {stylePickerId && stylePopup.pos && (() => {
+        const h = holdings.find(hh => hh.id === stylePickerId)
+        if (!h) return null
+        return (
+          <Portal>
+            <div
+              className="portal-popup"
+              style={{
+                position: 'fixed',
+                bottom: stylePopup.pos!.bottom,
+                left: stylePopup.pos!.left,
+                zIndex: 9999,
+              }}
+            >
+              <LineStylePicker
+                holding={h}
+                onStyleChange={patch => onStyleChange(stylePickerId, patch)}
+              />
+            </div>
+          </Portal>
+        )
+      })()}
     </div>
   )
 }

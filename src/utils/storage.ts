@@ -3,6 +3,7 @@ import type { Holding, Theme } from '../types'
 const KEYS = {
   holdings: 'abscissa:holdings',
   theme: 'abscissa:theme',
+  hidePctFootnote: 'abscissa:hidePctFootnote',
 }
 
 export function loadHoldings(): Holding[] {
@@ -27,4 +28,18 @@ export function loadTheme(): Theme {
 
 export function saveTheme(theme: Theme): void {
   localStorage.setItem(KEYS.theme, theme)
+}
+
+export function loadPctFootnoteHidden(): boolean {
+  try {
+    const raw = localStorage.getItem(KEYS.hidePctFootnote)
+    if (raw === '1' || raw === 'true') return true
+    return false
+  } catch {
+    return false
+  }
+}
+
+export function savePctFootnoteHidden(hidden: boolean): void {
+  localStorage.setItem(KEYS.hidePctFootnote, hidden ? '1' : '0')
 }

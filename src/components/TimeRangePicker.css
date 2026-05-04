@@ -1,6 +1,7 @@
 .trp {
   position: absolute;
-  bottom: 46px;
+  /* Above Liveline time ticks (~28px) with margin; measured from .main bottom, not the viewport */
+  bottom: 64px;
   left: 18px;
   display: flex;
   align-items: center;
