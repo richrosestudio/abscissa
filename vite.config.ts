@@ -5,11 +5,11 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  /** When `vercel dev` is not running, set VITE_API_PROXY_TARGET or API_PROXY_TARGET to your deployed origin (e.g. https://myapp.vercel.app) so /api routes still resolve. */
+  /** Proxy `/api` during `npm run dev`. Override with VITE_API_PROXY_TARGET (e.g. http://localhost:3000 when using `vercel dev`). */
   const apiProxyTarget =
     env.VITE_API_PROXY_TARGET ||
     env.API_PROXY_TARGET ||
-    'http://localhost:3000'
+    'https://abscissa.live'
 
   return {
     plugins: [react()],
