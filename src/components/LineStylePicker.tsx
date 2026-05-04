@@ -1,204 +1,287 @@
-import { useState, useRef } from 'react'
+import { useState, useEffect, useId, useMemo } from 'react'
 import type { Holding, LineStyle } from '../types'
 import ColorPicker from './ColorPicker'
+import { gradientCompanion, mixHex } from '../utils/colors'
 import './LineStylePicker.css'
+
+type ColorFocus = 'primary' | number
 
 interface Props {
   holding: Holding
+  onPrimaryColorChange: (color: string) => void
   onStyleChange: (patch: Partial<Pick<Holding, 'lineStyle' | 'lineThickness' | 'gradientColors'>>) => void
 }
 
-const LINE_STYLES: { value: LineStyle; label: string; dash: string }[] = [
-  { value: 'solid',  label: 'Solid',  dash: 'none' },
-  { value: 'dashed', label: 'Dashed', dash: '8 5'  },
-  { value: 'dotted', label: 'Dotted', dash: '2 5'  },
+const LINE_STYLES: { value: LineStyle; label: string; dash: string | undefined }[] = [
+  { value: 'solid', label: 'Solid', dash: undefined },
+  { value: 'dashed', label: 'Dashed', dash: '11 9' },
+  { value: 'dotted', label: 'Dotted', dash: '2 7' },
 ]
 
 const THICKNESSES: { value: number; label: string }[] = [
-  { value: 1, label: 'Thin'   },
+  { value: 1, label: 'Thin' },
   { value: 2, label: 'Normal' },
-  { value: 3, label: 'Thick'  },
-  { value: 4, label: 'Bold'   },
+  { value: 3, label: 'Thick' },
+  { value: 4, label: 'Bold' },
 ]
 
-export default function LineStylePicker({ holding, onStyleChange }: Props) {
-  const activeStyle    = holding.lineStyle     ?? 'solid'
-  const activeThick    = holding.lineThickness ?? 2
-  const gradColors     = holding.gradientColors ?? []
+function gradientPatchFromArray(arr: string[]): Holding['gradientColors'] {
+  if (arr.length === 1) return [arr[0]!]
+  if (arr.length === 2) return [arr[0]!, arr[1]!]
+  return [arr[0]!, arr[1]!, arr[2]!]
+}
 
-  // Which gradient stop colour-picker is open (0=none, 1=stop2, 2=stop3)
-  const [gradPickerIdx, setGradPickerIdx] = useState<number>(0)
-  // Nested colour-picker position
-  const [gradPickerPos, setGradPickerPos] = useState<{ top: number; left: number } | null>(null)
-  const stopBtnRefs = useRef<(HTMLButtonElement | null)[]>([null, null])
+export default function LineStylePicker({ holding, onPrimaryColorChange, onStyleChange }: Props) {
+  const uid = useId().replace(/:/g, '')
+  const activeStyle = holding.lineStyle ?? 'solid'
+  const activeThick = holding.lineThickness ?? 2
+  const grad = holding.gradientColors ?? []
+  const isGradient = grad.length > 0
 
-  const openGradPicker = (idx: number, btn: HTMLButtonElement | null) => {
-    if (gradPickerIdx === idx + 1) {
-      setGradPickerIdx(0)
-      setGradPickerPos(null)
-    } else {
-      if (!btn) return
-      const r = btn.getBoundingClientRect()
-      setGradPickerPos({ top: r.top, left: r.right + 8 })
-      setGradPickerIdx(idx + 1)
+  const [colorFocus, setColorFocus] = useState<ColorFocus>('primary')
+
+  const strokeStops = useMemo(
+    () => (isGradient ? [holding.color, ...grad] : [holding.color, holding.color]),
+    [isGradient, holding.color, grad],
+  )
+
+  const gradPreviewCss = useMemo(() => {
+    if (!isGradient || strokeStops.length < 2) return holding.color
+    return `linear-gradient(to right, ${strokeStops.join(', ')})`
+  }, [isGradient, strokeStops, holding.color])
+
+  useEffect(() => {
+    setColorFocus('primary')
+  }, [holding.id])
+
+  useEffect(() => {
+    if (colorFocus === 'primary') return
+    if (typeof colorFocus === 'number' && (colorFocus < 0 || colorFocus >= grad.length)) {
+      setColorFocus('primary')
     }
+  }, [colorFocus, grad.length])
+
+  const setSolid = () => {
+    onStyleChange({ gradientColors: undefined })
+    setColorFocus('primary')
   }
 
-  const updateGradStop = (idx: number, color: string) => {
-    const next = [...gradColors] as [string, string] | [string, string, string] | string[]
-    next[idx] = color
-    onStyleChange({ gradientColors: next.length >= 3
-      ? [next[0], next[1], next[2]] as [string, string, string]
-      : [next[0], next[1]] as [string, string]
-    })
+  const setGradientTwo = () => {
+    onStyleChange({ gradientColors: [gradientCompanion(holding.color)] })
+    setColorFocus(0)
   }
 
-  const addGradStop = () => {
-    if (gradColors.length === 0) {
-      onStyleChange({ gradientColors: [holding.color, holding.color] })
-    } else if (gradColors.length === 2) {
+  const setThreeStops = () => {
+    if (grad.length === 1) {
+      const end = grad[0]!
       onStyleChange({
-        gradientColors: [gradColors[0], gradColors[1], holding.color] as [string, string, string],
+        gradientColors: [mixHex(holding.color, end, 0.5), end],
       })
+      setColorFocus(0)
     }
   }
 
-  const removeGradStop = (idx: number) => {
-    if (gradPickerIdx === idx + 1) { setGradPickerIdx(0); setGradPickerPos(null) }
-    const next = gradColors.filter((_, i) => i !== idx)
-    if (next.length < 2) {
-      onStyleChange({ gradientColors: undefined })
-    } else {
-      onStyleChange({ gradientColors: next as [string, string] | [string, string, string] })
+  const setTwoStops = () => {
+    if (grad.length === 2) {
+      onStyleChange({ gradientColors: [grad[1]!] })
+      setColorFocus(0)
     }
   }
 
-  const gradientPreview = gradColors.length >= 1
-    ? `linear-gradient(to right, ${[holding.color, ...gradColors].join(', ')})`
-    : holding.color
+  const updateGradStop = (idx: number, hex: string) => {
+    const next = [...grad]
+    next[idx] = hex
+    onStyleChange({ gradientColors: gradientPatchFromArray(next) })
+  }
+
+  const pickerColor =
+    colorFocus === 'primary'
+      ? holding.color
+      : grad[colorFocus] ?? holding.color
+
+  const applyPickerColor = (hex: string) => {
+    if (colorFocus === 'primary') onPrimaryColorChange(hex)
+    else if (typeof colorFocus === 'number') updateGradStop(colorFocus, hex)
+  }
+
+  const stopLabel =
+    colorFocus === 'primary'
+      ? 'Line start'
+      : grad.length === 1 && colorFocus === 0
+        ? 'Line end'
+        : grad.length === 2 && colorFocus === 0
+          ? 'Middle'
+          : grad.length === 2 && colorFocus === 1
+            ? 'Line end'
+            : `Stop ${colorFocus + 2}`
+
+  const gradId = `lsp-grad-${uid}`
+  const nStops = strokeStops.length
 
   return (
     <div className="lsp">
-      {/* Line style section */}
-      <div className="lsp-section">
-        <span className="lsp-label">Style</span>
-        <div className="lsp-style-row">
+      <p className="lsp-heading">Line appearance</p>
+
+      <div
+        className="lsp-preview-wrap"
+        role="img"
+        aria-label="Preview of line stroke, weight, and colours"
+      >
+        <svg
+          className="lsp-preview-svg"
+          viewBox="0 0 220 22"
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <defs>
+            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+              {strokeStops.map((c, i) => (
+                <stop
+                  key={i}
+                  offset={`${nStops <= 1 ? 0 : (i / (nStops - 1)) * 100}%`}
+                  stopColor={c}
+                />
+              ))}
+            </linearGradient>
+          </defs>
+          <line
+            x1="6"
+            y1="11"
+            x2="214"
+            y2="11"
+            stroke={`url(#${gradId})`}
+            strokeWidth={activeThick}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray={LINE_STYLES.find(s => s.value === activeStyle)?.dash}
+          />
+        </svg>
+      </div>
+
+      <div className="lsp-block">
+        <span className="lsp-sublabel">Stroke</span>
+        <div className="lsp-seg-row">
           {LINE_STYLES.map(s => (
             <button
               key={s.value}
               type="button"
-              className={`lsp-style-btn ${activeStyle === s.value ? 'active' : ''}`}
+              className={`lsp-seg ${activeStyle === s.value ? 'is-on' : ''}`}
               onClick={() => onStyleChange({ lineStyle: s.value })}
-              title={s.label}
               aria-pressed={activeStyle === s.value}
             >
-              <svg viewBox="0 0 40 10" className="lsp-style-icon" aria-hidden>
-                <line
-                  x1="2" y1="5" x2="38" y2="5"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeDasharray={s.dash}
-                />
-              </svg>
-              <span className="lsp-style-label">{s.label}</span>
+              {s.label}
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Thickness section */}
-      <div className="lsp-section">
-        <span className="lsp-label">Thickness</span>
-        <div className="lsp-thick-row">
+        <span className="lsp-sublabel lsp-sublabel--gap">Weight</span>
+        <div className="lsp-weight-row">
           {THICKNESSES.map(t => (
             <button
               key={t.value}
               type="button"
-              className={`lsp-thick-btn ${activeThick === t.value ? 'active' : ''}`}
+              className={`lsp-weight ${activeThick === t.value ? 'is-on' : ''}`}
               onClick={() => onStyleChange({ lineThickness: t.value })}
-              title={t.label}
               aria-pressed={activeThick === t.value}
+              title={t.label}
             >
-              <svg viewBox="0 0 36 12" className="lsp-thick-icon" aria-hidden>
-                <line
-                  x1="2" y1="6" x2="34" y2="6"
-                  stroke="currentColor"
-                  strokeWidth={t.value}
-                  strokeLinecap="round"
-                />
-              </svg>
-              <span className="lsp-thick-label">{t.label}</span>
+              <span className="lsp-weight-barwrap" aria-hidden>
+                <span className="lsp-weight-bar" data-w={t.value} />
+              </span>
+              <span className="lsp-weight-label">{t.label}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Gradient section */}
-      <div className="lsp-section">
-        <span className="lsp-label">Gradient</span>
-        <div className="lsp-grad-row">
-          {/* Primary colour — read-only swatch (use the swatch on the chip to change it) */}
-          <div className="lsp-grad-stop lsp-grad-stop--primary" title="Primary colour (edit via chip swatch)">
-            <span className="lsp-swatch" style={{ background: holding.color }} />
-          </div>
-
-          {/* Extra stops */}
-          {gradColors.map((c, i) => (
-            <div key={i} className="lsp-grad-stop">
-              <button
-                ref={el => { stopBtnRefs.current[i] = el }}
-                type="button"
-                className={`lsp-swatch lsp-swatch--btn ${gradPickerIdx === i + 1 ? 'active' : ''}`}
-                style={{ background: c }}
-                onClick={() => openGradPicker(i, stopBtnRefs.current[i])}
-                aria-label={`Edit gradient colour stop ${i + 2}`}
-              />
-              <button
-                type="button"
-                className="lsp-grad-remove"
-                onClick={() => removeGradStop(i)}
-                aria-label={`Remove gradient colour stop ${i + 2}`}
-                title="Remove stop"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-
-          {/* Add stop button (up to 2 extra stops = 3 total) */}
-          {(gradColors.length === 0 || gradColors.length === 2) && (
-            <button
-              type="button"
-              className="lsp-grad-add"
-              onClick={addGradStop}
-              title="Add colour stop"
-              aria-label="Add gradient colour stop"
-            >
-              +
-            </button>
-          )}
+      <div className="lsp-block">
+        <span className="lsp-sublabel">Colour</span>
+        <div className="lsp-seg-row">
+          <button
+            type="button"
+            className={`lsp-seg ${!isGradient ? 'is-on' : ''}`}
+            onClick={setSolid}
+            aria-pressed={!isGradient}
+          >
+            Solid
+          </button>
+          <button
+            type="button"
+            className={`lsp-seg ${isGradient ? 'is-on' : ''}`}
+            onClick={() => {
+              if (!isGradient) setGradientTwo()
+            }}
+            aria-pressed={isGradient}
+          >
+            Gradient
+          </button>
         </div>
 
-        {/* Gradient preview bar */}
-        {gradColors.length > 0 && (
-          <div className="lsp-grad-preview" style={{ background: gradientPreview }} />
+        {isGradient && (
+          <>
+            <div className="lsp-ramp-wrap">
+              <div className="lsp-ramp-inner">
+                <div className="lsp-ramp-track" style={{ background: gradPreviewCss }} />
+                <div className="lsp-ramp-stops">
+                  <button
+                    type="button"
+                    className={`lsp-ramp-dot ${colorFocus === 'primary' ? 'is-on' : ''}`}
+                    style={{ left: '0%', background: holding.color }}
+                    onClick={() => setColorFocus('primary')}
+                    aria-label="Line start colour"
+                    title="Start"
+                  />
+                  {grad.map((c, i) => {
+                    const posPct = nStops <= 1 ? 100 : (100 * (i + 1)) / (nStops - 1)
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        className={`lsp-ramp-dot ${colorFocus === i ? 'is-on' : ''}`}
+                        style={{ left: `${posPct}%`, background: c }}
+                        onClick={() => setColorFocus(i)}
+                        aria-label={
+                          grad.length === 1 && i === 0
+                            ? 'Line end colour'
+                            : grad.length === 2 && i === 0
+                              ? 'Middle colour'
+                              : `Colour stop ${i + 2}`
+                        }
+                        title={
+                          grad.length === 1 ? 'End' : grad.length === 2 && i === 0 ? 'Middle' : 'End'
+                        }
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="lsp-grad-tools">
+              {grad.length === 1 ? (
+                <button type="button" className="lsp-mini-btn" onClick={setThreeStops}>
+                  Add middle colour
+                </button>
+              ) : (
+                <button type="button" className="lsp-mini-btn" onClick={setTwoStops}>
+                  Two colours only
+                </button>
+              )}
+            </div>
+
+            <div className="lsp-picker-embed">
+              <p className="lsp-picker-cap">{stopLabel}</p>
+              <ColorPicker color={pickerColor} onChange={applyPickerColor} />
+            </div>
+          </>
+        )}
+
+        {!isGradient && (
+          <div className="lsp-picker-embed lsp-picker-embed--solo">
+            <p className="lsp-picker-cap">Line colour</p>
+            <ColorPicker color={holding.color} onChange={onPrimaryColorChange} />
+          </div>
         )}
       </div>
-
-      {/* Nested colour picker for gradient stops — absolutely positioned */}
-      {gradPickerIdx > 0 && gradPickerPos && (
-        <div
-          className="lsp-nested-picker"
-          style={{ position: 'fixed', top: gradPickerPos.top, left: gradPickerPos.left, zIndex: 10001 }}
-          onMouseDown={e => e.stopPropagation()}
-        >
-          <ColorPicker
-            color={gradColors[gradPickerIdx - 1] ?? holding.color}
-            onChange={c => updateGradStop(gradPickerIdx - 1, c)}
-          />
-        </div>
-      )}
     </div>
   )
 }

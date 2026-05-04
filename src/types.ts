@@ -7,7 +7,8 @@ export interface Holding {
   ticker: string    // display ticker
   exchange: Exchange
   color: string
-  gradientColors?: [string, string] | [string, string, string]
+  /** Extra stops after `color` along the line: 1 → 2-stop gradient, 2 → 3-stop, 3 → 4-stop. */
+  gradientColors?: [string] | [string, string] | [string, string, string]
   lineStyle?: LineStyle
   lineThickness?: number  // 1–4
 }

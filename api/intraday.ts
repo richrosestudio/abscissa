@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import YahooFinance from 'yahoo-finance2'
+import { parseSymbolsParam, logServerError } from './_security'
 
 // yahoo-finance2 v3 requires instantiation
 const yahooFinance = new YahooFinance()
@@ -191,18 +192,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const raw = req.query['symbols']
-  if (!raw || typeof raw !== 'string') {
-    return res.status(400).json({ error: 'Missing symbols query param' })
-  }
-
-  const symbols = raw
-    .split(',')
-    .map(s => s.trim().toUpperCase())
-    .filter(Boolean)
-    .slice(0, 20) // guard against abuse
-
-  if (symbols.length === 0) {
-    return res.status(400).json({ error: 'No valid symbols' })
+  const symbols = parseSymbolsParam(typeof raw === 'string' ? raw : undefined)
+  if (!symbols) {
+    return res.status(400).json({ error: 'Missing or invalid symbols query param' })
   }
 
   const now = new Date()
@@ -334,14 +326,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         result.series[symbol] = { points, meta: { exchange, openTime, currency, openPrice } }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        result.series[symbol] = { error: message }
+        logServerError(`intraday:${symbol}`, err)
+        result.series[symbol] = { error: 'Unable to load market data' }
       }
     })
   )
 
   // Cache for 55 seconds (slightly under the 60s poll interval)
   res.setHeader('Cache-Control', 's-maxage=55, stale-while-revalidate=10')
-  res.setHeader('Access-Control-Allow-Origin', '*')
   return res.status(200).json(result)
 }

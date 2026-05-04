@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type { Holding, SeriesData, Theme, TimeRange } from '../types'
 import { pctToColor } from '../utils/colors'
-import ColorPicker from './ColorPicker'
 import LineStylePicker from './LineStylePicker'
 import Portal from './Portal'
 import './BottomStrip.css'
@@ -120,14 +119,12 @@ export default function BottomStrip({
   pctFootnoteHidden,
   onPctFootnoteHiddenChange,
 }: Props) {
-  const [colorPickerId, setColorPickerId] = useState<string | null>(null)
   const [stylePickerId, setStylePickerId] = useState<string | null>(null)
   const [addInput, setAddInput] = useState('')
   const [animPcts, setAnimPcts] = useState<Record<string, AnimatedPct>>({})
   const rafRef = useRef<number | null>(null)
   const animPctsRef = useRef<Record<string, AnimatedPct>>({})
   const swatchRefs = useRef<Record<string, HTMLButtonElement | null>>({})
-  const styleBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
   // Search state
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
@@ -142,11 +139,7 @@ export default function BottomStrip({
   // Portal position for search dropdown
   const searchAnchor = useAnchoredPopup(inputWrapRef as React.RefObject<HTMLElement | null>)
 
-  // Portal position for colour picker
-  const colorAnchorRef = useRef<HTMLButtonElement | null>(null)
-  const colorPopup = useAnchoredPopup(colorAnchorRef)
-
-  // Portal position for line style picker
+  // Portal position for line appearance panel (colour + stroke)
   const styleAnchorRef = useRef<HTMLButtonElement | null>(null)
   const stylePopup = useAnchoredPopup(styleAnchorRef)
 
@@ -260,21 +253,7 @@ export default function BottomStrip({
     }
   }
 
-  const openColorPicker = (id: string, btn: HTMLButtonElement) => {
-    if (colorPickerId === id) {
-      setColorPickerId(null)
-      colorPopup.close()
-    } else {
-      setColorPickerId(id)
-      colorAnchorRef.current = btn
-      colorPopup.open()
-      // Close style picker if open
-      setStylePickerId(null)
-      stylePopup.close()
-    }
-  }
-
-  const openStylePicker = (id: string, btn: HTMLButtonElement) => {
+  const openLineAppearance = (id: string, btn: HTMLButtonElement) => {
     if (stylePickerId === id) {
       setStylePickerId(null)
       stylePopup.close()
@@ -282,9 +261,6 @@ export default function BottomStrip({
       setStylePickerId(id)
       styleAnchorRef.current = btn
       stylePopup.open()
-      // Close colour picker if open
-      setColorPickerId(null)
-      colorPopup.close()
     }
   }
 
@@ -298,8 +274,6 @@ export default function BottomStrip({
       let inPortal = false
       inPortals.forEach(p => { if (p.contains(t)) inPortal = true })
       if (!inStrip && !inPortal) {
-        setColorPickerId(null)
-        colorPopup.close()
         setStylePickerId(null)
         stylePopup.close()
         setSearchOpen(false)
@@ -308,7 +282,7 @@ export default function BottomStrip({
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [colorPopup, stylePopup, searchAnchor])
+  }, [stylePopup, searchAnchor])
 
   // Scroll highlighted item into view
   useEffect(() => {
@@ -366,7 +340,8 @@ export default function BottomStrip({
             >
               <div className="swatch-wrap">
                 <button
-                  className="swatch"
+                  type="button"
+                  className={`swatch${stylePickerId === h.id ? ' swatch--open' : ''}`}
                   style={{ background: h.gradientColors?.length
                     ? `linear-gradient(to right, ${[h.color, ...h.gradientColors].join(', ')})`
                     : h.color
@@ -375,27 +350,12 @@ export default function BottomStrip({
                   onClick={e => {
                     e.stopPropagation()
                     const btn = swatchRefs.current[h.id]
-                    if (btn) openColorPicker(h.id, btn)
+                    if (btn) openLineAppearance(h.id, btn)
                   }}
-                  aria-label={`Change colour for ${h.ticker}`}
+                  aria-label={`Line and colour for ${h.ticker}`}
+                  aria-expanded={stylePickerId === h.id}
+                  title="Line & colour"
                 />
-                <button
-                  className={`strip-style-btn ${stylePickerId === h.id ? 'active' : ''}`}
-                  ref={el => { styleBtnRefs.current[h.id] = el }}
-                  onClick={e => {
-                    e.stopPropagation()
-                    const btn = styleBtnRefs.current[h.id]
-                    if (btn) openStylePicker(h.id, btn)
-                  }}
-                  aria-label={`Line style for ${h.ticker}`}
-                  title="Line style"
-                >
-                  <svg viewBox="0 0 12 10" width="12" height="10" fill="none" stroke="currentColor" strokeLinecap="round" aria-hidden>
-                    <line x1="1" y1="2"  x2="11" y2="2"  strokeWidth="1.5" />
-                    <line x1="1" y1="5"  x2="11" y2="5"  strokeWidth="1"   strokeDasharray="2 1.5" />
-                    <line x1="1" y1="8"  x2="11" y2="8"  strokeWidth="0.75" strokeDasharray="0.5 2" />
-                  </svg>
-                </button>
               </div>
 
               <span className="strip-ticker">{h.ticker}</span>
@@ -498,27 +458,7 @@ export default function BottomStrip({
         </Portal>
       )}
 
-      {/* Portalled: colour picker — left-anchored to swatch left edge */}
-      {colorPickerId && colorPopup.pos && (
-        <Portal>
-          <div
-            className="portal-popup color-picker-portal"
-            style={{
-              position: 'fixed',
-              bottom: colorPopup.pos.bottom,
-              left: colorPopup.pos.left,
-              zIndex: 9999,
-            }}
-          >
-            <ColorPicker
-              color={holdings.find(h => h.id === colorPickerId)?.color ?? '#6366f1'}
-              onChange={c => onColorChange(colorPickerId, c)}
-            />
-          </div>
-        </Portal>
-      )}
-
-      {/* Portalled: line style picker — left-anchored to style button */}
+      {/* Portalled: line appearance (colour, gradient, stroke, thickness) */}
       {stylePickerId && stylePopup.pos && (() => {
         const h = holdings.find(hh => hh.id === stylePickerId)
         if (!h) return null
@@ -534,7 +474,9 @@ export default function BottomStrip({
               }}
             >
               <LineStylePicker
+                key={h.id}
                 holding={h}
+                onPrimaryColorChange={c => onColorChange(stylePickerId, c)}
                 onStyleChange={patch => onStyleChange(stylePickerId, patch)}
               />
             </div>

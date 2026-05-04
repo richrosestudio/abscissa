@@ -184,31 +184,9 @@
   box-shadow: 0 0 0 2px var(--border);
 }
 
-.strip-style-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 12px;
-  padding: 0;
-  background: none;
-  border: none;
-  border-radius: 3px;
-  color: var(--text-dim);
-  cursor: pointer;
-  transition: color 0.12s, background 0.12s;
-  outline: none;
-  flex-shrink: 0;
-}
-
-.strip-style-btn:hover {
-  color: var(--text);
-  background: var(--hover-bg);
-}
-
-.strip-style-btn.active {
-  color: var(--text);
-  background: var(--hover-bg);
+.swatch.swatch--open {
+  box-shadow: 0 0 0 2px var(--text-muted);
+  transform: scale(1.25);
 }
 
 /* ---------- strip text ---------- */

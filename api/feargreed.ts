@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { sendInternalError, logServerError } from './_security'
 
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60')
 
   try {
@@ -16,14 +16,14 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
     )
 
     if (!upstream.ok) {
-      return res.status(502).json({ error: `Upstream returned ${upstream.status}` })
+      return res.status(502).json({ error: 'Upstream service unavailable' })
     }
 
     const data = await upstream.json()
     const fg = data?.fear_and_greed
 
     if (!fg || typeof fg.score !== 'number') {
-      return res.status(502).json({ error: 'Unexpected response shape from CNN API' })
+      return res.status(502).json({ error: 'Unexpected response from upstream' })
     }
 
     return res.status(200).json({
@@ -31,6 +31,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       rating: (fg.rating as string) ?? 'neutral',
     })
   } catch (err) {
-    return res.status(500).json({ error: String(err) })
+    logServerError('feargreed', err)
+    return sendInternalError(res)
   }
 }

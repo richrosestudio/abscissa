@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import YahooFinance from 'yahoo-finance2'
+import { parseSearchQuery, sendInternalError, logServerError, isValidSymbol } from './_security'
 
 const yahooFinance = new YahooFinance()
 
@@ -38,13 +39,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const q = req.query['q']
-  if (!q || typeof q !== 'string' || q.trim().length < 1) {
-    return res.status(400).json({ error: 'Missing q param' })
+  const rawQ = req.query['q']
+  const qRaw = typeof rawQ === 'string' ? parseSearchQuery(rawQ) : null
+  if (!qRaw) {
+    return res.status(400).json({ error: 'Invalid or missing q param' })
   }
 
   try {
-    const data = await yahooFinance.search(q.trim(), {
+    const data = await yahooFinance.search(qRaw, {
       newsCount: 0,
       quotesCount: 8,
     })
@@ -66,12 +68,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         exchange: (item as { exchDisp?: string }).exchDisp ?? '',
         type: item.quoteType ?? '',
       }))
+      .filter(r => isValidSymbol(r.symbol))
 
     res.setHeader('Cache-Control', 's-maxage=30')
-    res.setHeader('Access-Control-Allow-Origin', '*')
     return res.status(200).json({ results })
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    return res.status(500).json({ error: message })
+    logServerError('search', err)
+    return sendInternalError(res)
   }
 }

@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import YahooFinance from 'yahoo-finance2'
+import { parseSymbolsParam, logServerError } from './_security'
 
 const yahooFinance = new YahooFinance()
 
@@ -44,16 +45,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const rawSymbols = req.query['symbols']
+  const symbols = parseSymbolsParam(typeof rawSymbols === 'string' ? rawSymbols : undefined)
+  if (!symbols) {
+    return res.status(400).json({ error: 'Missing or invalid symbols param' })
+  }
+
   const rawRange   = req.query['range']
 
-  if (!rawSymbols || typeof rawSymbols !== 'string') {
-    return res.status(400).json({ error: 'Missing symbols param' })
-  }
   if (!rawRange || typeof rawRange !== 'string' || !(rawRange in RANGE_CONFIG)) {
     return res.status(400).json({ error: 'Invalid range param (must be 1W|1M|3M|1Y)' })
   }
 
-  const symbols = rawSymbols.split(',').map(s => s.trim().toUpperCase()).filter(Boolean).slice(0, 20)
   const range   = rawRange as Range
   const config  = RANGE_CONFIG[range]
 
@@ -99,12 +101,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const currency = chart.meta.currency ?? 'USD'
         result.series[symbol] = { points, meta: { basePrice, currency } }
       } catch (err) {
-        result.series[symbol] = { error: err instanceof Error ? err.message : String(err) }
+        logServerError(`historical:${symbol}`, err)
+        result.series[symbol] = { error: 'Unable to load historical data' }
       }
     })
   )
 
   res.setHeader('Cache-Control', `s-maxage=${config.cacheSeconds}, stale-while-revalidate=30`)
-  res.setHeader('Access-Control-Allow-Origin', '*')
   return res.status(200).json(result)
 }
