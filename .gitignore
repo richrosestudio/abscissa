@@ -1,4 +1,6 @@
-.vercel
+# Vercel — keep project link in repo; ignore local cache
+.vercel/*
+!.vercel/project.json
 
 # Dependencies
 node_modules/
