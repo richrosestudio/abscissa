@@ -133,7 +133,7 @@ function isInRegularSession(exchange: Exchange, time: number): boolean {
 /** Pre/post + RTH window in each market's local time (minute-of-day), inclusive end. */
 const EXTENDED_BAND: Record<Exchange, { startMin: number; endMin: number }> = {
   US: { startMin: 4 * 60, endMin: 20 * 60 + 59 },
-  LSE: { startMin: 1 * 60, endMin: 21 * 60 + 59 },
+  LSE: { startMin: 0, endMin: 21 * 60 + 59 },
   TSE: { startMin: 7 * 60 + 30, endMin: 18 * 60 + 29 },
 }
 
@@ -154,13 +154,35 @@ function isInExtendedChartWindow(exchange: Exchange, unixSec: number): boolean {
 
 function quoteTimestamp(q: { date?: Date | number | string }): number {
   if (q.date instanceof Date) return Math.floor(q.date.getTime() / 1000)
-  return Math.floor(Number(q.date) / 1000)
+  if (typeof q.date === 'string') {
+    const ms = Date.parse(q.date)
+    return Number.isFinite(ms) ? Math.floor(ms / 1000) : NaN
+  }
+  const n = Number(q.date)
+  if (!Number.isFinite(n)) return NaN
+  if (n > 1e12) return Math.floor(n / 1000)
+  return Math.floor(n)
+}
+
+function firstPositivePrice(q: {
+  close?: number | null
+  open?: number | null
+  low?: number | null
+  high?: number | null
+}): number | null {
+  for (const k of ['close', 'open', 'low', 'high'] as const) {
+    const v = q[k]
+    if (v != null && Number.isFinite(v) && v > 0) return v
+  }
+  return null
 }
 
 /**
  * GET /api/intraday?symbols=AAPL,TSLA,VOD.L
  *
- * Returns intraday % change from session open for each symbol.
+ * Returns intraday % change for each symbol (pre/post from Yahoo includePrePost).
+ * Before the regular session opens, points are % vs previous close (or first tick if missing).
+ * After the open, RTH bars are % vs session open; earlier extended-hours bars stay % vs prior close.
  * All Yahoo Finance calls are server-side only — never from the browser.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -183,10 +205,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'No valid symbols' })
   }
 
-  // Start of today in UTC (Yahoo period1 accepts Date or string)
   const now = new Date()
   const todayStart = new Date(now)
   todayStart.setUTCHours(0, 0, 0, 0)
+  const rollingStart = new Date(now.getTime() - 72 * 3600 * 1000)
 
   const result: IntradayResponse = {
     series: {},
@@ -198,66 +220,117 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const exchange = detectExchange(symbol)
 
-        const chart = await yahooFinance.chart(symbol, {
-          period1: todayStart,
-          interval: '1m',
-          includePrePost: true,
-        })
-
-        const quotes = chart.quotes ?? []
-        if (quotes.length === 0) {
-          result.series[symbol] = { error: 'No data returned' }
-          return
+        const cleanFromChart = (
+          chart: Awaited<ReturnType<typeof yahooFinance.chart>>,
+        ) => {
+          const quotes = chart.quotes ?? []
+          return quotes
+            .map(q => {
+              const ts = quoteTimestamp(q)
+              const raw = q as {
+                close?: number | null
+                open?: number | null
+                low?: number | null
+                high?: number | null
+              }
+              const price = firstPositivePrice(raw)
+              const openVal =
+                raw.open != null && Number.isFinite(raw.open) && raw.open > 0 ? raw.open : null
+              return { ts, open: openVal, price }
+            })
+            .filter(
+              q =>
+                Number.isFinite(q.ts) &&
+                q.price != null &&
+                q.price > 0 &&
+                isInExtendedChartWindow(exchange, q.ts),
+            )
+            .sort((a, b) => a.ts - b.ts)
+            .filter((q, idx, arr) => idx === 0 || q.ts !== arr[idx - 1].ts)
         }
 
-        const cleaned = quotes
-          .map(q => {
-            const ts = quoteTimestamp(q)
-            const price = q.close ?? q.open
-            return { ts, open: q.open, price }
-          })
-          .filter(
-            q =>
-              Number.isFinite(q.ts) &&
-              q.price != null &&
-              q.price > 0 &&
-              isInExtendedChartWindow(exchange, q.ts),
-          )
-          .sort((a, b) => a.ts - b.ts)
-          .filter((q, idx, arr) => idx === 0 || q.ts !== arr[idx - 1].ts)
+        // Try today's window first; fall back to 72-hour rolling window.
+        // No explicit period2 — Yahoo defaults to "now" for live/partial sessions,
+        // which ensures today's LSE/TSE bars are returned when markets are open.
+        let chart: Awaited<ReturnType<typeof yahooFinance.chart>> | null = null
+        let cleaned: ReturnType<typeof cleanFromChart> = []
 
-        if (cleaned.length === 0) {
+        for (const period1 of [todayStart, rollingStart]) {
+          const c = await yahooFinance.chart(symbol, {
+            period1,
+            interval: '1m',
+            includePrePost: true,
+          })
+          const candidate = cleanFromChart(c)
+          if (candidate.length > 0) {
+            chart = c
+            cleaned = candidate
+            break
+          }
+        }
+
+        if (!chart || cleaned.length === 0) {
           result.series[symbol] = { error: 'No intraday data returned' }
           return
         }
 
+        const meta = chart.meta
+        const prevClose =
+          meta.previousClose != null && meta.previousClose > 0
+            ? meta.previousClose
+            : meta.chartPreviousClose != null && meta.chartPreviousClose > 0
+              ? meta.chartPreviousClose
+              : null
+
         const firstRthIdx = cleaned.findIndex(q => isInRegularSession(exchange, q.ts))
-        if (firstRthIdx < 0) {
-          result.series[symbol] = { error: 'No regular-session data returned' }
-          return
+        const firstBar = cleaned[0]
+        const firstBarPx =
+          (firstBar.open != null && firstBar.open > 0 ? firstBar.open : firstBar.price) ?? 0
+
+        let rthOpen: number | null = null
+        if (firstRthIdx >= 0) {
+          const rthFirst = cleaned[firstRthIdx]
+          rthOpen =
+            (rthFirst.open != null && rthFirst.open > 0 ? rthFirst.open : rthFirst.price) ?? null
+          if (rthOpen == null || rthOpen <= 0) {
+            rthOpen = meta.regularMarketPrice && meta.regularMarketPrice > 0 ? meta.regularMarketPrice : null
+          }
         }
 
-        const rthFirst = cleaned[firstRthIdx]
-        const openPrice =
-          (rthFirst.open != null && rthFirst.open > 0
-            ? rthFirst.open
-            : rthFirst.price) ??
-          chart.meta.regularMarketPrice
+        // Pre / post hours before first RTH bar: % vs previous close (or first tick of the day).
+        // From RTH onward: % vs cash session open — avoids an empty chart before the bell.
+        const preAnchor = prevClose ?? (firstBarPx > 0 ? firstBarPx : null)
+        let openPrice: number
+        let openTime: number
 
-        if (!openPrice || openPrice <= 0) {
+        if (firstRthIdx >= 0 && rthOpen != null && rthOpen > 0) {
+          openPrice = rthOpen
+          openTime = cleaned[firstRthIdx].ts
+        } else if (preAnchor != null && preAnchor > 0) {
+          openPrice = preAnchor
+          openTime = firstBar.ts
+        } else {
           result.series[symbol] = { error: 'Could not determine open price' }
           return
         }
 
         const points: IntradayPoint[] = []
-        for (const q of cleaned) {
-          const price = q.price
-          const pct = ((price - openPrice) / openPrice) * 100
+        for (let i = 0; i < cleaned.length; i++) {
+          const q = cleaned[i]
+          const price = q.price!
+          let base: number
+          if (firstRthIdx >= 0 && rthOpen != null && rthOpen > 0 && i < firstRthIdx) {
+            base = preAnchor ?? firstBarPx
+          } else if (firstRthIdx >= 0 && rthOpen != null && rthOpen > 0) {
+            base = rthOpen
+          } else {
+            base = preAnchor ?? firstBarPx
+          }
+          const pct = ((price - base) / base) * 100
           points.push({ t: q.ts, pct: parseFloat(pct.toFixed(3)) })
         }
 
-        const openTime = rthFirst.ts
-        const currency = chart.meta.currency ?? 'USD'
+        const currency = meta.currency ?? 'USD'
 
         result.series[symbol] = { points, meta: { exchange, openTime, currency, openPrice } }
       } catch (err) {

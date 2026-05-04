@@ -13,9 +13,9 @@ interface RangeConfig {
 
 const RANGE_CONFIG: Record<Range, RangeConfig> = {
   '1W': { interval: '60m', daysBack: 7,   cacheSeconds: 300  },
-  '1M': { interval: '1d',  daysBack: 30,  cacheSeconds: 600  },
-  '3M': { interval: '1d',  daysBack: 91,  cacheSeconds: 600  },
-  '1Y': { interval: '1wk', daysBack: 365, cacheSeconds: 3600 },
+  '1M': { interval: '60m', daysBack: 30,  cacheSeconds: 600  },
+  '3M': { interval: '60m', daysBack: 91,  cacheSeconds: 600  },
+  '1Y': { interval: '1d',  daysBack: 365, cacheSeconds: 3600 },
 }
 
 export interface HistoricalPoint {

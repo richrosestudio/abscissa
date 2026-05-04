@@ -3,6 +3,19 @@ import YahooFinance from 'yahoo-finance2'
 
 const yahooFinance = new YahooFinance()
 
+/** Yahoo sometimes returns LSE symbols without `.L`; chart + exchange detection need the suffix. */
+function normalizeSearchSymbol(symbol: string, exchDisp: string): string {
+  const s = symbol.trim().toUpperCase()
+  if (s.endsWith('.L') || s.endsWith('.T')) return s
+  const ex = exchDisp.toLowerCase()
+  const isLondon =
+    ex.includes('london') ||
+    ex.includes('lse') ||
+    ex === 'lon'
+  if (isLondon) return `${s}.L`
+  return s
+}
+
 export interface SearchResult {
   symbol: string
   name: string
@@ -43,7 +56,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
       .slice(0, 8)
       .map(item => ({
-        symbol: item.symbol ?? '',
+        symbol: normalizeSearchSymbol(
+          item.symbol ?? '',
+          (item as { exchDisp?: string }).exchDisp ?? '',
+        ),
         name: (item as { shortname?: string; longname?: string }).shortname
           ?? (item as { shortname?: string; longname?: string }).longname
           ?? item.symbol ?? '',

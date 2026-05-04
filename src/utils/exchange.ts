@@ -8,7 +8,9 @@ export function detectExchange(ticker: string): Exchange {
 }
 
 export function normalizeId(ticker: string): string {
-  return ticker.toUpperCase().trim()
+  let s = ticker.trim().toUpperCase()
+  if (s.startsWith('$')) s = s.slice(1).trim().toUpperCase()
+  return s
 }
 
 /**

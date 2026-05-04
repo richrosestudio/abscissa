@@ -16,6 +16,8 @@ interface Props {
   onColorChange: (id: string, color: string) => void
   onAdd: (ticker: string) => void
   onRemove: (id: string) => void
+  /** Last fetch error message per holding id (hover for detail) */
+  tickerErrors?: Record<string, string>
 }
 
 /** Binary-search for the point in a sorted series closest to targetTime */
@@ -93,6 +95,7 @@ function useAnchoredPopup(anchorRef: React.RefObject<HTMLElement | null>) {
 export default function BottomStrip({
   holdings, seriesData, focusedId, theme, hoveredTime,
   onFocus, onResetFocus, onColorChange, onAdd, onRemove,
+  tickerErrors = {},
 }: Props) {
   const [colorPickerId, setColorPickerId] = useState<string | null>(null)
   const [addInput, setAddInput] = useState('')
@@ -301,11 +304,14 @@ export default function BottomStrip({
             }
           }
 
+          const errMsg = tickerErrors[h.id]
+
           return (
             <div
               key={h.id}
               className={`strip-item ${isFocused ? 'focused' : ''} ${isDimmed ? 'dimmed' : ''}`}
               onClick={() => onFocus(h.id)}
+              title={errMsg ? `Data: ${errMsg}` : undefined}
             >
               <div className="swatch-wrap">
                 <button

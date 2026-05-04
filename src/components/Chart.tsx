@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, useState } from 'react'
+import { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import { Liveline } from 'liveline'
 import type { LivelinePoint, LivelineSeries } from 'liveline'
 import type { Exchange, Holding, SeriesData, Theme, TimeRange } from '../types'
@@ -12,6 +12,14 @@ const RANGE_WINDOW_SECS: Record<TimeRange, number> = {
   '1M': 30  * 86400,
   '3M': 91  * 86400,
   '1Y': 365 * 86400,
+}
+
+const WINDOW_ZOOM_LIMITS: Record<TimeRange, { min: number; max: number }> = {
+  '1D': { min: 3_600,       max: 46_800       },
+  '1W': { min: 86_400,      max: 7 * 86_400   },
+  '1M': { min: 2 * 86_400,  max: 30 * 86_400  },
+  '3M': { min: 7 * 86_400,  max: 91 * 86_400  },
+  '1Y': { min: 30 * 86_400, max: 365 * 86_400 },
 }
 
 interface Props {
@@ -178,6 +186,50 @@ function smoothNoisyIntradayPoints(points: LivelinePoint[]): LivelinePoint[] {
   })
 }
 
+/**
+ * Liveline's multi-series path only draws when at least two points fall inside the visible
+ * X window; bridge flat segments otherwise so thin venues (e.g. LSE) still render.
+ */
+function ensureDrawableInWindow(
+  points: LivelinePoint[],
+  leftEdge: number,
+  rightEdge: number,
+  liveSec: number,
+): LivelinePoint[] {
+  if (points.length === 0) return points
+  const sorted = [...points].sort((a, b) => a.time - b.time)
+  const right = Math.min(rightEdge, liveSec)
+  const inWin = sorted.filter(p => p.time >= leftEdge - 2 && p.time <= right)
+
+  if (inWin.length >= 2) return sorted
+
+  if (inWin.length === 1) {
+    const p = inWin[0]
+    const carryEnd = right
+    const carryStart = leftEdge + 2 * 60
+    const t2 = p.time < carryEnd - 2 ? carryEnd : Math.min(p.time + 60, right)
+    const extra = t2 > p.time
+      ? { time: t2, value: p.value }
+      : { time: carryStart, value: p.value }
+    return [...sorted, extra].sort((a, b) => a.time - b.time)
+  }
+
+  const lastBefore = sorted.filter(p => p.time < leftEdge - 2).pop()
+  const last = lastBefore ?? sorted[sorted.length - 1]
+  const carryEnd = right
+  const carryStart = leftEdge + 2 * 60
+  const t1 = carryStart
+  const t2 = carryEnd
+  if (t2 <= t1) {
+    return [...sorted, { time: t1, value: last.value }, { time: t1 + 1, value: last.value }].sort(
+      (a, b) => a.time - b.time,
+    )
+  }
+  return [...sorted, { time: t1, value: last.value }, { time: t2, value: last.value }].sort(
+    (a, b) => a.time - b.time,
+  )
+}
+
 function mergeIntervals(intervals: { start: number; end: number }[]) {
   const sorted = [...intervals].sort((a, b) => a.start - b.start)
   const merged: { start: number; end: number }[] = []
@@ -194,75 +246,6 @@ function mergeIntervals(intervals: { start: number; end: number }[]) {
   return merged
 }
 
-function getActiveExchanges(
-  hasLSE: boolean,
-  hasUS: boolean,
-  hasTSE: boolean,
-  selectedExchange: Exchange | null,
-): Exchange[] {
-  if (selectedExchange) return [selectedExchange]
-  return [
-    ...(hasLSE ? (['LSE'] as const) : []),
-    ...(hasUS ? (['US'] as const) : []),
-    ...(hasTSE ? (['TSE'] as const) : []),
-  ]
-}
-
-function getMergedOpenIntervals(
-  activeExchanges: Exchange[],
-  leftEdge: number,
-  rightClip: number,
-): { start: number; end: number }[] {
-  if (activeExchanges.length === 0) return []
-  return mergeIntervals(
-    activeExchanges.flatMap(ex => getOpenIntervalsForExchange(ex, leftEdge, rightClip)),
-  )
-}
-
-function timeInOpenSession(t: number, merged: { start: number; end: number }[]): boolean {
-  return merged.some(({ start, end }) => t >= start && t < end)
-}
-
-/**
- * Split points into runs matching open vs closed session bands (same geometry as zone overlay).
- * Bridges segment boundaries with a duplicated point so Liveline draws a continuous path.
- */
-function splitSeriesByOpenZones(
-  points: LivelinePoint[],
-  mergedOpen: { start: number; end: number }[],
-): { points: LivelinePoint[]; inOpen: boolean }[] {
-  if (points.length === 0) return []
-
-  const runs: { points: LivelinePoint[]; inOpen: boolean }[] = []
-  let bucket: LivelinePoint[] = []
-  let prevOpen: boolean | null = null
-
-  for (const p of points) {
-    const open = timeInOpenSession(p.time, mergedOpen)
-    if (prevOpen !== null && open !== prevOpen && bucket.length > 0) {
-      if (bucket.length >= 2) runs.push({ points: bucket, inOpen: prevOpen })
-      const last = bucket[bucket.length - 1]
-      bucket = [last, p]
-    } else {
-      bucket.push(p)
-    }
-    prevOpen = open
-  }
-
-  if (bucket.length >= 2 && prevOpen !== null) {
-    runs.push({ points: bucket, inOpen: prevOpen })
-  } else if (bucket.length === 1 && prevOpen !== null && runs.length > 0) {
-    const br = runs[runs.length - 1]
-    const bridge = br.points[br.points.length - 1]
-    runs.push({ points: [bridge, bucket[0]], inOpen: prevOpen })
-  }
-
-  if (runs.length === 0 && points.length >= 2 && prevOpen !== null) {
-    runs.push({ points, inOpen: prevOpen })
-  }
-
-  return runs.filter(r => r.points.length >= 2)
-}
 
 /**
  * Session shading ends at liveTimeSec (not in Liveline's future buffer strip).
@@ -325,6 +308,22 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
   /** Cap zone shading at live time; rolling window still uses minute clockTick */
   const [zoneLiveMs, setZoneLiveMs] = useState(() => Date.now())
 
+  // Interaction state — zoom overrides the default window; yDomainOverride pans the Y axis
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [userWindowSecs, setUserWindowSecs] = useState<number | null>(null)
+  const [yDomainOverride, setYDomainOverride] = useState<{ min: number; max: number } | null>(null)
+  const dragStartY = useRef(0)
+  const dragStartDomain = useRef({ min: 0, max: 0 })
+  // Refs so drag/wheel callbacks always see fresh values without recreating
+  const yDomainRef = useRef({ min: -1, max: 1 })
+  const yDomainOverrideRef = useRef<{ min: number; max: number } | null>(null)
+
+  // Reset interaction overrides whenever the timeRange tab changes
+  useEffect(() => {
+    setUserWindowSecs(null)
+    setYDomainOverride(null)
+  }, [timeRange])
+
   // Detect zero crossings on new data
   useEffect(() => {
     let crossed = false
@@ -367,65 +366,126 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
     ? (useTSEWindow ? WINDOW_TSE_H : WINDOW_NO_TSE_H) * 3600
     : RANGE_WINDOW_SECS[timeRange]
 
+  const effectiveWindowSecs = userWindowSecs ?? windowSecs
+
+  // Non-passive wheel listener — synchronous zoom applied directly on every event (no rAF lag)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const handler = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = el.getBoundingClientRect()
+      const isOnYAxis = e.clientX > rect.right - 58  // 54px axis strip + 4px buffer
+
+      if (isOnYAxis) {
+        const rawDelta = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY
+        const factor = Math.pow(1.06, rawDelta / 100)
+        setYDomainOverride(prev => {
+          const cur = prev ?? yDomainRef.current
+          const mid = (cur.min + cur.max) / 2
+          const span = Math.max(0.5, Math.min(200, (cur.max - cur.min) * factor))
+          return { min: mid - span / 2, max: mid + span / 2 }
+        })
+        return
+      }
+
+      // Pinch gesture (ctrlKey on macOS) or mouse wheel — zoom the time window
+      // Pinch deltaY is small (-5..+5); mouse wheel is larger — normalise then apply base-2 factor
+      const rawDelta = e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY
+      const sensitivity = e.ctrlKey ? 0.008 : 0.012
+      const factor = Math.pow(2, rawDelta * sensitivity)
+      setUserWindowSecs(prev => {
+        const base = prev ?? windowSecs
+        const { min, max } = WINDOW_ZOOM_LIMITS[timeRange]
+        return Math.min(max, Math.max(min, base * factor))
+      })
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [windowSecs, timeRange])
+
+  // Double-click anywhere on the chart resets both zoom and Y-axis pan
+  const handleDoubleClick = useCallback(() => {
+    setUserWindowSecs(null)
+    setYDomainOverride(null)
+  }, [])
+
+  // Y-axis drag — pointer capture keeps tracking smooth even if cursor leaves the overlay
+  const handleYAxisPointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragStartY.current = e.clientY
+    dragStartDomain.current = yDomainOverrideRef.current ?? yDomainRef.current
+  }, [])
+
+  const handleYAxisPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
+    const { min, max } = dragStartDomain.current
+    const mid = (min + max) / 2
+    const dy = e.clientY - dragStartY.current
+    // Drag down = compress range (zoom in, finer increments); drag up = expand
+    const factor = Math.pow(1.04, dy / 10)
+    const span = Math.max(0.5, Math.min(200, (max - min) * factor))
+    setYDomainOverride({ min: mid - span / 2, max: mid + span / 2 })
+  }, [])
+
+  const handleYAxisPointerUp = useCallback((e: React.PointerEvent) => {
+    e.currentTarget.releasePointerCapture(e.pointerId)
+  }, [])
+
   const visibleWindow = useMemo(() => {
-    const rightEdge = clockTick / 1000 + windowSecs * LIVELINE_RIGHT_BUFFER
+    const rightEdge = clockTick / 1000 + effectiveWindowSecs * LIVELINE_RIGHT_BUFFER
     return {
-      leftEdge: rightEdge - windowSecs,
+      leftEdge: rightEdge - effectiveWindowSecs,
       rightEdge,
     }
-  }, [clockTick, windowSecs])
+  }, [clockTick, effectiveWindowSecs])
 
   // Build Liveline series array
   const series = useMemo((): LivelineSeries[] => {
     const leftEdge = visibleWindow.leftEdge
-    const plotRightEdge = visibleWindow.rightEdge
-    const liveSec = zoneLiveMs / 1000
-    const zoneEnd = Math.min(plotRightEdge, liveSec)
-
-    const activeExchanges = getActiveExchanges(hasLSE, hasUS, hasTSE, selectedExchange ?? null)
-    const mergedOpen =
-      timeRange === '1D' && activeExchanges.length > 0
-        ? getMergedOpenIntervals(activeExchanges, leftEdge, zoneEnd)
-        : []
+    const rightEdge = visibleWindow.rightEdge
+    const zoneEnd = Math.min(rightEdge, zoneLiveMs / 1000)
 
     return holdings
       .filter(h => seriesData[h.id])
-      .flatMap(h => {
+      .flatMap((h): LivelineSeries[] => {
         const d = seriesData[h.id]
         const rawData: LivelinePoint[] = d.points.map(p => ({
           time: p.time,
           value: p.value,
         }))
         let data = timeRange === '1D' ? smoothNoisyIntradayPoints(rawData) : rawData
+        if (timeRange === '1D') {
+          data = ensureDrawableInWindow(data, leftEdge, rightEdge, zoneLiveMs / 1000)
+        }
 
         const isDimmedByFocus = focusedId !== null && focusedId !== h.id
+        const isFocused      = focusedId !== null && focusedId === h.id
 
-        if (timeRange === '1D' && data.length > 0 && data[0].time > leftEdge) {
-          data = [{ time: leftEdge, value: 0 }, ...data]
+        const color     = isDimmedByFocus ? hexToRgba(h.color, 0.07) : h.color
+        const lineWidth = focusedId === null ? undefined : isFocused ? 3 : 1
+
+        // Liveline dims strokes outside `sessions`; use each listing's home exchange so
+        // e.g. US names stay faded on the LSE clock until NASDAQ/NYSE hours reach them on the X axis.
+        let sessions: { start: number; end: number }[] | undefined
+        if (timeRange === '1D' && zoneEnd > leftEdge) {
+          sessions = mergeIntervals(getOpenIntervalsForExchange(h.exchange, leftEdge, zoneEnd))
         }
 
-        if (timeRange !== '1D') {
-          const color = isDimmedByFocus ? hexToRgba(h.color, 0.15) : h.color
-          return [{ id: h.id, data, value: d.latestPct, color, label: h.ticker, extendToNow: true }]
-        }
-
-        const runs = splitSeriesByOpenZones(data, mergedOpen)
-        if (runs.length === 0) return []
-
-        return runs.map((run, i) => {
-          const isLast = i === runs.length - 1
-          const base = run.inOpen ? h.color : hexToRgba(h.color, 0.25)
-          const color = isDimmedByFocus ? hexToRgba(h.color, 0.12) : base
-
-          return {
-            id: `${h.id}:${i}`,
-            data: run.points,
+        return [
+          {
+            id: h.id,
+            data,
             value: d.latestPct,
             color,
-            label: isLast ? h.ticker : undefined,
-            extendToNow: isLast,
-          }
-        })
+            label: h.ticker,
+            extendToNow: true,
+            linear: false,
+            ...(lineWidth !== undefined ? { lineWidth } : {}),
+            ...(timeRange === '1D' && sessions != null ? { sessions } : {}),
+          },
+        ]
       })
   }, [
     holdings,
@@ -436,10 +496,6 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
     visibleWindow.leftEdge,
     visibleWindow.rightEdge,
     zoneLiveMs,
-    selectedExchange,
-    hasLSE,
-    hasUS,
-    hasTSE,
   ])
 
   // Compute symmetric ±B% domain from all intraday points (single visible series)
@@ -455,6 +511,10 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
       ? computeSymmetricDomain(allPcts)
       : computeDataDomain(allPcts)
   }, [holdings, seriesData, timeRange])
+
+  // Keep refs fresh so drag/wheel callbacks always see current values
+  yDomainRef.current = yDomain
+  yDomainOverrideRef.current = yDomainOverride
 
   const hasData = series.some(s => s.data.length > 0)
 
@@ -533,9 +593,12 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
   }, [timeRange, selectedExchange])
 
   return (
-    <div className="chart-wrapper">
+    <div className="chart-wrapper" onDoubleClick={handleDoubleClick}>
       <div className={`ref-line-glow ${refLineGlow ? 'active' : ''}`} />
-      <div className={`liveline-container${loading && hasData ? ' liveline-container--loading' : ''}`}>
+      <div
+        ref={containerRef}
+        className={`liveline-container${loading && hasData ? ' liveline-container--loading' : ''}`}
+      >
         <Liveline
           data={[]}
           value={0}
@@ -544,7 +607,7 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
           referenceLine={{ value: 0 }}
           formatValue={v => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`}
           formatTime={formatTime}
-          window={windowSecs}
+          window={effectiveWindowSecs}
           grid
           scrub
           pulse={isIntraday}
@@ -554,8 +617,8 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
           fill={false}
           momentum={false}
           showSeriesChips={false}
-          yDomain={yDomain}
-          lerpSpeed={isIntraday ? 0.04 : 1}
+          yDomain={yDomainOverride ?? yDomain}
+          lerpSpeed={isIntraday ? 0.04 : 0.8}
           style={{ height: '100%', width: '100%' }}
         />
         {zones.length > 0 && (
@@ -576,6 +639,13 @@ export default function Chart({ holdings, seriesData, focusedId, theme, onHoverT
             ))}
           </div>
         )}
+        {/* Y-axis drag overlay — covers Liveline's right-hand axis strip */}
+        <div
+          className="y-axis-drag-overlay"
+          onPointerDown={handleYAxisPointerDown}
+          onPointerMove={handleYAxisPointerMove}
+          onPointerUp={handleYAxisPointerUp}
+        />
       </div>
     </div>
   )

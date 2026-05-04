@@ -47,8 +47,9 @@
   padding: 3px 7px;
 }
 
-/* Pulsing dot */
+/* Pulsing dot — inline-block so transform/glow animate reliably */
 .trp-live-dot {
+  display: inline-block;
   width: 5px;
   height: 5px;
   border-radius: 50%;
@@ -57,15 +58,25 @@
   transition: background 0.3s ease;
 }
 
-/* Active live dot — green and pulsing */
+/* Active live tab — green with a soft, slow breathe */
 .trp-live-dot--on {
   background: #22c55e;
-  animation: live-pulse 1.8s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.35);
+  animation: live-pulse 2.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
 
 @keyframes live-pulse {
-  0%,  100% { opacity: 1;   transform: scale(1);    }
-  50%        { opacity: 0.4; transform: scale(0.75); }
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.28);
+  }
+  50% {
+    opacity: 0.86;
+    transform: scale(0.92);
+    box-shadow: 0 0 5px 1px rgba(34, 197, 94, 0.22);
+  }
 }
 
 /* Thin separator between Live and the range buttons */

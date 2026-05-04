@@ -132,16 +132,19 @@ export default function Header({ theme, onToggleTheme, hoveredTime, selectedExch
       </div>
 
       <div className="header-actions">
-        <button
-          type="button"
-          className="theme-toggle"
-          onClick={onToggleTheme}
-          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
-          {theme === 'dark' ? <IconSun /> : <IconMoon />}
-        </button>
-        <FearGreed />
+        <FearGreed
+          leadingSlot={
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={onToggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? <IconSun /> : <IconMoon />}
+            </button>
+          }
+        />
       </div>
     </header>
   )

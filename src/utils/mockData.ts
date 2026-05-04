@@ -197,7 +197,7 @@ export function getMockHistoricalData(
   holdings: Holding[],
 ): Record<string, { points: SeriesPoint[]; latestPct: number; basePrice: number; currency: string }> {
   const { days, volMult } = RANGE_PARAMS[range]
-  const intervalSec = range === '1W' ? 3600 : 86400  // hourly for 1W, daily otherwise
+  const intervalSec = range === '1Y' ? 86400 : 3600  // hourly for 1W/1M/3M, daily for 1Y
   const nowSec = Math.floor(Date.now() / 1000)
   const startSec = nowSec - days * 86400
 

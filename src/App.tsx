@@ -36,7 +36,7 @@ export default function App() {
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [idle, setIdle] = useState(false)
 
-  const { data: seriesData, usingMock, loading } = useIntradayData(holdings, selectedRange)
+  const { data: seriesData, usingMock, loading, perTickerErrors } = useIntradayData(holdings, selectedRange)
 
   // Persist
   useEffect(() => { saveTheme(theme) }, [theme])
@@ -158,6 +158,7 @@ export default function App() {
         onColorChange={updateColor}
         onAdd={addHolding}
         onRemove={removeHolding}
+        tickerErrors={perTickerErrors}
       />
     </div>
   )

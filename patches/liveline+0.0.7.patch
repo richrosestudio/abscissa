@@ -1,17 +1,122 @@
 diff --git a/node_modules/liveline/dist/index.cjs b/node_modules/liveline/dist/index.cjs
-index 4709730..b426875 100644
+index 4709730..3b0df79 100644
 --- a/node_modules/liveline/dist/index.cjs
 +++ b/node_modules/liveline/dist/index.cjs
-@@ -415,7 +415,7 @@ function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlp
+@@ -387,7 +387,7 @@ function blendColor(c1, c2, t) {
+   if (a >= 0.995) return `rgb(${r},${g},${b})`;
+   return `rgba(${r},${g},${b},${a.toFixed(3)})`;
+ }
+-function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlpha = 1, strokeColor) {
++function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlpha = 1, strokeColor, linear = false) {
+   const { h, pad } = layout;
+   const baseAlpha = ctx.globalAlpha;
+   if (showFill && fillAlpha > 0.01) {
+@@ -398,7 +398,13 @@ function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlp
+     ctx.beginPath();
+     ctx.moveTo(pts[0][0], h - pad.bottom);
+     ctx.lineTo(pts[0][0], pts[0][1]);
+-    drawSpline(ctx, pts);
++    if (linear) {
++      for (let i = 1; i < pts.length; i++) {
++        ctx.lineTo(pts[i][0], pts[i][1]);
++      }
++    } else {
++      drawSpline(ctx, pts);
++    }
+     ctx.lineTo(pts[pts.length - 1][0], h - pad.bottom);
+     ctx.closePath();
+     ctx.fillStyle = grad;
+@@ -407,7 +413,13 @@ function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlp
+   ctx.globalAlpha = baseAlpha * lineAlpha;
+   ctx.beginPath();
+   ctx.moveTo(pts[0][0], pts[0][1]);
+-  drawSpline(ctx, pts);
++  if (linear) {
++    for (let i = 1; i < pts.length; i++) {
++      ctx.lineTo(pts[i][0], pts[i][1]);
++    }
++  } else {
++    drawSpline(ctx, pts);
++  }
+   ctx.strokeStyle = strokeColor ?? palette.line;
+   ctx.lineWidth = palette.lineWidth;
+   ctx.lineJoin = "round";
+@@ -415,7 +427,73 @@ function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlp
    ctx.stroke();
    ctx.globalAlpha = baseAlpha;
  }
 -function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scrubX, scrubAmount = 0, chartReveal = 1, now_ms = 0, colorBlend = 1, skipDashLine = false, fillScale = 1) {
-+function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scrubX, scrubAmount = 0, chartReveal = 1, now_ms = 0, colorBlend = 1, skipDashLine = false, fillScale = 1, extendToNow = true) {
++var SESSION_DIM_ALPHA = 0.35;
++var SESSION_FADE_SECS = 600;
++function renderCurveWithSessions(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor, linear, sessions) {
++  if (!sessions) {
++    renderCurve(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor, linear);
++    return;
++  }
++  const { pad, toX, h, chartH } = layout;
++  const baseAlpha = ctx.globalAlpha;
++  const resolvedColor = strokeColor ?? palette.line;
++  const [r, g, b] = parseRgba(resolvedColor);
++  const dimColor = `rgba(${r},${g},${b},${SESSION_DIM_ALPHA})`;
++  const fullColor = resolvedColor;
++  const fadeW = (toX(SESSION_FADE_SECS) - toX(0));
++  const drawPath = (color, alpha) => {
++    ctx.save();
++    ctx.globalAlpha = baseAlpha * alpha;
++    ctx.beginPath();
++    ctx.moveTo(pts[0][0], pts[0][1]);
++    if (linear) {
++      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
++    } else {
++      drawSpline(ctx, pts);
++    }
++    ctx.strokeStyle = color;
++    ctx.lineWidth = palette.lineWidth;
++    ctx.lineJoin = "round";
++    ctx.lineCap = "round";
++    ctx.stroke();
++    ctx.restore();
++  };
++  const clipRect = (x, w, fn) => {
++    ctx.save();
++    ctx.beginPath();
++    ctx.rect(x, pad.top, w, chartH);
++    ctx.clip();
++    fn();
++    ctx.restore();
++  };
++  if (sessions.length === 0) {
++    clipRect(pad.left - 1, layout.w, () => drawPath(dimColor, lineAlpha));
++    return;
++  }
++  clipRect(pad.left - 1, layout.w, () => drawPath(dimColor, lineAlpha));
++  for (const sess of sessions) {
++    const x1 = toX(sess.start);
++    const x2 = toX(sess.end);
++    const coreX1 = x1 + fadeW;
++    const coreX2 = x2 - fadeW;
++    if (coreX1 < coreX2) {
++      clipRect(coreX1, coreX2 - coreX1, () => drawPath(fullColor, lineAlpha));
++    }
++    clipRect(x1 - fadeW, 2 * fadeW, () => {
++      const grad = ctx.createLinearGradient(x1 - fadeW, 0, x1 + fadeW, 0);
++      grad.addColorStop(0, dimColor);
++      grad.addColorStop(1, fullColor);
++      drawPath(grad, lineAlpha);
++    });
++    clipRect(x2 - fadeW, 2 * fadeW, () => {
++      const grad = ctx.createLinearGradient(x2 - fadeW, 0, x2 + fadeW, 0);
++      grad.addColorStop(0, fullColor);
++      grad.addColorStop(1, dimColor);
++      drawPath(grad, lineAlpha);
++    });
++  }
++}
++function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scrubX, scrubAmount = 0, chartReveal = 1, now_ms = 0, colorBlend = 1, skipDashLine = false, fillScale = 1, extendToNow = true, linear = false, sessions = null) {
    const { h, pad, toX, toY, chartW, chartH } = layout;
    const incomingAlpha = ctx.globalAlpha;
    const yMin = pad.top;
-@@ -431,15 +431,19 @@ function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scr
+@@ -431,15 +509,19 @@ function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scr
      const baseY = loadingY(t, centerY, amplitude, scroll);
      return baseY + (rawY - baseY) * localReveal;
    } : (rawY, _x) => rawY;
@@ -36,15 +141,94 @@ index 4709730..b426875 100644
    if (pts.length < 2) return;
    let lineAlpha = 1;
    let fillAlpha = fillScale;
-@@ -1627,6 +1631,7 @@ function drawMultiFrame(ctx, layout, opts) {
+@@ -451,6 +533,7 @@ function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scr
+   const colorT = Math.min(1, chartReveal * 3) * colorBlend;
+   const strokeColor = chartReveal < 1 || colorBlend < 1 ? blendColor(palette.gridLabel, palette.line, colorT) : void 0;
+   const isScrubbing = scrubX !== null;
++  const renderFn = sessions ? (sc, la, fa) => renderCurveWithSessions(ctx, layout, palette, pts, showFill, la, fa, sc, linear, sessions) : (sc, la, fa) => renderCurve(ctx, layout, palette, pts, showFill, la, fa, sc, linear);
+   ctx.save();
+   ctx.beginPath();
+   ctx.rect(pad.left - 1, pad.top, chartW + 2, chartH);
+@@ -460,17 +543,17 @@ function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scr
+     ctx.beginPath();
+     ctx.rect(0, 0, scrubX, h);
+     ctx.clip();
+-    renderCurve(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor);
++    renderFn(strokeColor, lineAlpha, fillAlpha);
+     ctx.restore();
+     ctx.save();
+     ctx.beginPath();
+     ctx.rect(scrubX, 0, layout.w - scrubX, h);
+     ctx.clip();
+     ctx.globalAlpha = incomingAlpha * (1 - scrubAmount * 0.6);
+-    renderCurve(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor);
++    renderFn(strokeColor, lineAlpha, fillAlpha);
+     ctx.restore();
+   } else {
+-    renderCurve(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor);
++    renderFn(strokeColor, lineAlpha, fillAlpha);
+   }
+   ctx.restore();
+   if (!skipDashLine) {
+@@ -637,6 +720,9 @@ function drawCrosshair(ctx, layout, palette, hoverX, hoverValue, hoverTime, form
+   const valueText = formatValue(hoverValue);
+   const timeText = formatTime(hoverTime);
+   const separator = "  \xB7  ";
++  const vNum = Number(hoverValue);
++  const valueFill =
++    vNum > 0 ? "#22c55e" : vNum < 0 ? "#ef4444" : palette.tooltipText;
+   ctx.save();
+   ctx.globalAlpha = scrubOpacity;
+   ctx.font = '400 13px "SF Mono", Menlo, monospace';
+@@ -659,7 +745,7 @@ function drawCrosshair(ctx, layout, palette, hoverX, hoverValue, hoverTime, form
+     ctx.strokeText(valueText, tx, ty);
+     ctx.strokeText(separator + timeText, tx + valueW, ty);
+   }
+-  ctx.fillStyle = palette.tooltipText;
++  ctx.fillStyle = valueFill;
+   ctx.fillText(valueText, tx, ty);
+   ctx.fillStyle = palette.gridLabel;
+   ctx.fillText(separator + timeText, tx + valueW, ty);
+@@ -704,7 +790,10 @@ function drawMultiCrosshair(ctx, layout, palette, hoverX, hoverTime, entries, fo
+     segments.push({ text: dotInline, color: e.color, isDot: true });
+     const label = e.label ? `${e.label} ` : "";
+     if (label) segments.push({ text: label, color: palette.gridLabel });
+-    segments.push({ text: formatValue(e.value), color: palette.tooltipText });
++    const vNum = Number(e.value);
++    const valColor =
++      vNum > 0 ? "#22c55e" : vNum < 0 ? "#ef4444" : palette.gridLabel;
++    segments.push({ text: formatValue(e.value), color: valColor });
+   }
+   let totalW = 0;
+   const segWidths = [];
+@@ -1351,12 +1440,15 @@ function drawLineModeCrosshair(ctx, layout, palette, hoverX, value, hoverTime, f
+   if (opacity < 0.1 || layout.w < 200) return;
+   const val = formatValue(value);
+   const time = formatTime(hoverTime);
++  const vNum = Number(value);
++  const valCol =
++    vNum > 0 ? "#22c55e" : vNum < 0 ? "#ef4444" : palette.line;
+   ctx.save();
+   ctx.globalAlpha = opacity;
+   ctx.font = '400 13px "SF Mono", Menlo, monospace';
+   ctx.textAlign = "left";
+   const parts = [
+-    { text: val, color: palette.line },
++    { text: val, color: valCol },
+     { text: "  \xB7  ", color: palette.gridLabel },
+     { text: time, color: palette.gridLabel }
+   ];
+@@ -1627,6 +1719,9 @@ function drawMultiFrame(ctx, layout, opts) {
      if (combinedAlpha < 0.01) continue;
      ctx.save();
      if (combinedAlpha < 1) ctx.globalAlpha = combinedAlpha;
 +    const ext = s.extendToNow !== false;
++    const lin = s.linear === true;
++    const sess = s.sessions ?? null;
      const pts = drawLine(
        ctx,
        layout,
-@@ -1639,7 +1644,11 @@ function drawMultiFrame(ctx, layout, opts) {
+@@ -1639,7 +1734,13 @@ function drawMultiFrame(ctx, layout, opts) {
        scrubX,
        opts.scrubAmount,
        reveal,
@@ -53,30 +237,45 @@ index 4709730..b426875 100644
 +      1,
 +      true,
 +      1,
-+      ext
++      ext,
++      lin,
++      sess
      );
      ctx.restore();
      if (pts && pts.length > 0) {
-@@ -2611,7 +2620,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -1990,8 +2091,8 @@ var VALUE_SNAP_THRESHOLD = 1e-3;
+ var ADAPTIVE_SPEED_BOOST = 0.2;
+ var MOMENTUM_GREEN = [34, 197, 94];
+ var MOMENTUM_RED = [239, 68, 68];
+-var CHART_REVEAL_SPEED = 0.14;
+-var CHART_REVEAL_SPEED_FWD = 0.09;
++var CHART_REVEAL_SPEED = 1;
++var CHART_REVEAL_SPEED_FWD = 1;
+ var PAUSE_PROGRESS_SPEED = 0.12;
+ var PAUSE_CATCHUP_SPEED = 0.08;
+ var PAUSE_CATCHUP_SPEED_FAST = 0.22;
+@@ -2611,7 +2712,10 @@ function useLivelineEngine(canvasRef, containerRef, config) {
            data: s.data.slice(),
            value: s.value,
            palette: s.palette,
 -          label: s.label
 +          label: s.label,
-+          extendToNow: s.extendToNow !== false
++          extendToNow: s.extendToNow !== false,
++          linear: s.linear === true,
++          sessions: s.sessions ?? null
          }));
        }
        if (hasData && !cfg.isMultiSeries) lastMultiSeriesRef.current = [];
-@@ -3181,7 +3191,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -3181,7 +3285,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
              if (range.min < globalMin) globalMin = range.min;
              if (range.max > globalMax) globalMax = range.max;
            }
 -          seriesEntries.push({ visible, smoothValue: sv, palette: s.palette, label: s.label, alpha });
-+          seriesEntries.push({ visible, smoothValue: sv, palette: s.palette, label: s.label, alpha, extendToNow: s.extendToNow !== false });
++          seriesEntries.push({ visible, smoothValue: sv, palette: s.palette, label: s.label, alpha, extendToNow: s.extendToNow !== false, linear: s.linear === true, sessions: s.sessions ?? null });
          }
        }
        if (seriesEntries.length === 0) {
-@@ -3203,7 +3213,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -3203,7 +3307,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
          rafRef.current = requestAnimationFrame(draw);
          return;
        }
@@ -85,7 +284,7 @@ index 4709730..b426875 100644
        const adaptiveSpeed = cfg.lerpSpeed + ADAPTIVE_SPEED_BOOST * 0.5;
        const rangeResult = updateRange(
          computedRange,
-@@ -3559,6 +3569,8 @@ function Liveline({
+@@ -3559,6 +3663,8 @@ function Liveline({
    onModeChange,
    onSeriesToggle,
    seriesToggleCompact = false,
@@ -94,17 +293,35 @@ index 4709730..b426875 100644
    lineWidth,
    className,
    style
-@@ -3594,7 +3606,8 @@ function Liveline({
-       data: s.data,
-       value: s.value,
-       palette: seriesPalettes.get(s.id) ?? resolveTheme(s.color || SERIES_COLORS[i % SERIES_COLORS.length], theme),
+@@ -3589,13 +3695,20 @@ function Liveline({
+   }, [seriesProp, theme]);
+   const multiSeries = (0, import_react2.useMemo)(() => {
+     if (!seriesProp || !seriesPalettes) return void 0;
+-    return seriesProp.map((s, i) => ({
+-      id: s.id,
+-      data: s.data,
+-      value: s.value,
+-      palette: seriesPalettes.get(s.id) ?? resolveTheme(s.color || SERIES_COLORS[i % SERIES_COLORS.length], theme),
 -      label: s.label
-+      label: s.label,
-+      extendToNow: s.extendToNow !== false
-     }));
+-    }));
++    return seriesProp.map((s, i) => {
++      const basePalette = seriesPalettes.get(s.id) ?? resolveTheme(s.color || SERIES_COLORS[i % SERIES_COLORS.length], theme);
++      const palette = s.lineWidth != null ? { ...basePalette, lineWidth: s.lineWidth } : basePalette;
++      return {
++        id: s.id,
++        data: s.data,
++        value: s.value,
++        palette,
++        label: s.label,
++        extendToNow: s.extendToNow !== false,
++        linear: s.linear === true,
++        sessions: s.sessions ?? null
++      };
++    });
    }, [seriesProp, seriesPalettes, theme]);
    const showMomentum = momentum !== false;
-@@ -3695,7 +3708,8 @@ function Liveline({
+   const momentumOverride = typeof momentum === "string" ? momentum : void 0;
+@@ -3695,7 +3808,8 @@ function Liveline({
      lineValue,
      multiSeries,
      isMultiSeries,
@@ -114,7 +331,7 @@ index 4709730..b426875 100644
    });
    const cursorStyle = scrub ? cursor : "default";
    const activeColor = isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)";
-@@ -3905,7 +3919,7 @@ function Liveline({
+@@ -3905,7 +4019,7 @@ function Liveline({
            ]
          }
        ),
@@ -124,19 +341,25 @@ index 4709730..b426875 100644
          gap: ws === "text" ? 4 : 2,
          background: ws === "text" ? "transparent" : isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
 diff --git a/node_modules/liveline/dist/index.d.cts b/node_modules/liveline/dist/index.d.cts
-index 414c4e6..25afd0e 100644
+index 414c4e6..ab5ea15 100644
 --- a/node_modules/liveline/dist/index.d.cts
 +++ b/node_modules/liveline/dist/index.d.cts
-@@ -45,6 +45,8 @@ interface LivelineSeries {
+@@ -45,6 +45,14 @@ interface LivelineSeries {
      value: number;
      color: string;
      label?: string;
 +    /** When false, the line ends at the last data point (no horizontal tail to `now`). Default true. */
 +    extendToNow?: boolean;
++    /** When true, stroke uses straight segments (no cubic spline). Default false. */
++    linear?: boolean;
++    /** Open-market session windows. When provided the line renders dim outside sessions and full inside, with a gradient fade at each boundary. */
++    sessions?: { start: number; end: number }[];
++    /** Override the stroke width for this individual series (default: palette lineWidth ≈ 2). */
++    lineWidth?: number;
  }
  interface LivelineProps {
      data: LivelinePoint[];
-@@ -92,6 +94,8 @@ interface LivelineProps {
+@@ -92,6 +100,8 @@ interface LivelineProps {
      onModeChange?: (mode: 'line' | 'candle') => void;
      onSeriesToggle?: (id: string, visible: boolean) => void;
      seriesToggleCompact?: boolean;
@@ -146,19 +369,25 @@ index 414c4e6..25afd0e 100644
      style?: CSSProperties;
  }
 diff --git a/node_modules/liveline/dist/index.d.ts b/node_modules/liveline/dist/index.d.ts
-index 414c4e6..25afd0e 100644
+index 414c4e6..ab5ea15 100644
 --- a/node_modules/liveline/dist/index.d.ts
 +++ b/node_modules/liveline/dist/index.d.ts
-@@ -45,6 +45,8 @@ interface LivelineSeries {
+@@ -45,6 +45,14 @@ interface LivelineSeries {
      value: number;
      color: string;
      label?: string;
 +    /** When false, the line ends at the last data point (no horizontal tail to `now`). Default true. */
 +    extendToNow?: boolean;
++    /** When true, stroke uses straight segments (no cubic spline). Default false. */
++    linear?: boolean;
++    /** Open-market session windows. When provided the line renders dim outside sessions and full inside, with a gradient fade at each boundary. */
++    sessions?: { start: number; end: number }[];
++    /** Override the stroke width for this individual series (default: palette lineWidth ≈ 2). */
++    lineWidth?: number;
  }
  interface LivelineProps {
      data: LivelinePoint[];
-@@ -92,6 +94,8 @@ interface LivelineProps {
+@@ -92,6 +100,8 @@ interface LivelineProps {
      onModeChange?: (mode: 'line' | 'candle') => void;
      onSeriesToggle?: (id: string, visible: boolean) => void;
      seriesToggleCompact?: boolean;
@@ -168,19 +397,124 @@ index 414c4e6..25afd0e 100644
      style?: CSSProperties;
  }
 diff --git a/node_modules/liveline/dist/index.js b/node_modules/liveline/dist/index.js
-index fd05062..7a7e740 100644
+index fd05062..191fec7 100644
 --- a/node_modules/liveline/dist/index.js
 +++ b/node_modules/liveline/dist/index.js
-@@ -388,7 +388,7 @@ function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlp
+@@ -360,7 +360,7 @@ function blendColor(c1, c2, t) {
+   if (a >= 0.995) return `rgb(${r},${g},${b})`;
+   return `rgba(${r},${g},${b},${a.toFixed(3)})`;
+ }
+-function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlpha = 1, strokeColor) {
++function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlpha = 1, strokeColor, linear = false) {
+   const { h, pad } = layout;
+   const baseAlpha = ctx.globalAlpha;
+   if (showFill && fillAlpha > 0.01) {
+@@ -371,7 +371,13 @@ function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlp
+     ctx.beginPath();
+     ctx.moveTo(pts[0][0], h - pad.bottom);
+     ctx.lineTo(pts[0][0], pts[0][1]);
+-    drawSpline(ctx, pts);
++    if (linear) {
++      for (let i = 1; i < pts.length; i++) {
++        ctx.lineTo(pts[i][0], pts[i][1]);
++      }
++    } else {
++      drawSpline(ctx, pts);
++    }
+     ctx.lineTo(pts[pts.length - 1][0], h - pad.bottom);
+     ctx.closePath();
+     ctx.fillStyle = grad;
+@@ -380,7 +386,13 @@ function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlp
+   ctx.globalAlpha = baseAlpha * lineAlpha;
+   ctx.beginPath();
+   ctx.moveTo(pts[0][0], pts[0][1]);
+-  drawSpline(ctx, pts);
++  if (linear) {
++    for (let i = 1; i < pts.length; i++) {
++      ctx.lineTo(pts[i][0], pts[i][1]);
++    }
++  } else {
++    drawSpline(ctx, pts);
++  }
+   ctx.strokeStyle = strokeColor ?? palette.line;
+   ctx.lineWidth = palette.lineWidth;
+   ctx.lineJoin = "round";
+@@ -388,7 +400,73 @@ function renderCurve(ctx, layout, palette, pts, showFill, lineAlpha = 1, fillAlp
    ctx.stroke();
    ctx.globalAlpha = baseAlpha;
  }
 -function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scrubX, scrubAmount = 0, chartReveal = 1, now_ms = 0, colorBlend = 1, skipDashLine = false, fillScale = 1) {
-+function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scrubX, scrubAmount = 0, chartReveal = 1, now_ms = 0, colorBlend = 1, skipDashLine = false, fillScale = 1, extendToNow = true) {
++var SESSION_DIM_ALPHA = 0.35;
++var SESSION_FADE_SECS = 600;
++function renderCurveWithSessions(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor, linear, sessions) {
++  if (!sessions) {
++    renderCurve(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor, linear);
++    return;
++  }
++  const { pad, toX, h, chartH } = layout;
++  const baseAlpha = ctx.globalAlpha;
++  const resolvedColor = strokeColor ?? palette.line;
++  const [r, g, b] = parseRgba(resolvedColor);
++  const dimColor = `rgba(${r},${g},${b},${SESSION_DIM_ALPHA})`;
++  const fullColor = resolvedColor;
++  const fadeW = (toX(SESSION_FADE_SECS) - toX(0));
++  const drawPath = (color, alpha) => {
++    ctx.save();
++    ctx.globalAlpha = baseAlpha * alpha;
++    ctx.beginPath();
++    ctx.moveTo(pts[0][0], pts[0][1]);
++    if (linear) {
++      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
++    } else {
++      drawSpline(ctx, pts);
++    }
++    ctx.strokeStyle = color;
++    ctx.lineWidth = palette.lineWidth;
++    ctx.lineJoin = "round";
++    ctx.lineCap = "round";
++    ctx.stroke();
++    ctx.restore();
++  };
++  const clipRect = (x, w, fn) => {
++    ctx.save();
++    ctx.beginPath();
++    ctx.rect(x, pad.top, w, chartH);
++    ctx.clip();
++    fn();
++    ctx.restore();
++  };
++  if (sessions.length === 0) {
++    clipRect(pad.left - 1, layout.w, () => drawPath(dimColor, lineAlpha));
++    return;
++  }
++  clipRect(pad.left - 1, layout.w, () => drawPath(dimColor, lineAlpha));
++  for (const sess of sessions) {
++    const x1 = toX(sess.start);
++    const x2 = toX(sess.end);
++    const coreX1 = x1 + fadeW;
++    const coreX2 = x2 - fadeW;
++    if (coreX1 < coreX2) {
++      clipRect(coreX1, coreX2 - coreX1, () => drawPath(fullColor, lineAlpha));
++    }
++    clipRect(x1 - fadeW, 2 * fadeW, () => {
++      const grad = ctx.createLinearGradient(x1 - fadeW, 0, x1 + fadeW, 0);
++      grad.addColorStop(0, dimColor);
++      grad.addColorStop(1, fullColor);
++      drawPath(grad, lineAlpha);
++    });
++    clipRect(x2 - fadeW, 2 * fadeW, () => {
++      const grad = ctx.createLinearGradient(x2 - fadeW, 0, x2 + fadeW, 0);
++      grad.addColorStop(0, fullColor);
++      grad.addColorStop(1, dimColor);
++      drawPath(grad, lineAlpha);
++    });
++  }
++}
++function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scrubX, scrubAmount = 0, chartReveal = 1, now_ms = 0, colorBlend = 1, skipDashLine = false, fillScale = 1, extendToNow = true, linear = false, sessions = null) {
    const { h, pad, toX, toY, chartW, chartH } = layout;
    const incomingAlpha = ctx.globalAlpha;
    const yMin = pad.top;
-@@ -404,15 +404,19 @@ function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scr
+@@ -404,15 +482,19 @@ function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scr
      const baseY = loadingY(t, centerY, amplitude, scroll);
      return baseY + (rawY - baseY) * localReveal;
    } : (rawY, _x) => rawY;
@@ -205,15 +539,94 @@ index fd05062..7a7e740 100644
    if (pts.length < 2) return;
    let lineAlpha = 1;
    let fillAlpha = fillScale;
-@@ -1600,6 +1604,7 @@ function drawMultiFrame(ctx, layout, opts) {
+@@ -424,6 +506,7 @@ function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scr
+   const colorT = Math.min(1, chartReveal * 3) * colorBlend;
+   const strokeColor = chartReveal < 1 || colorBlend < 1 ? blendColor(palette.gridLabel, palette.line, colorT) : void 0;
+   const isScrubbing = scrubX !== null;
++  const renderFn = sessions ? (sc, la, fa) => renderCurveWithSessions(ctx, layout, palette, pts, showFill, la, fa, sc, linear, sessions) : (sc, la, fa) => renderCurve(ctx, layout, palette, pts, showFill, la, fa, sc, linear);
+   ctx.save();
+   ctx.beginPath();
+   ctx.rect(pad.left - 1, pad.top, chartW + 2, chartH);
+@@ -433,17 +516,17 @@ function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scr
+     ctx.beginPath();
+     ctx.rect(0, 0, scrubX, h);
+     ctx.clip();
+-    renderCurve(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor);
++    renderFn(strokeColor, lineAlpha, fillAlpha);
+     ctx.restore();
+     ctx.save();
+     ctx.beginPath();
+     ctx.rect(scrubX, 0, layout.w - scrubX, h);
+     ctx.clip();
+     ctx.globalAlpha = incomingAlpha * (1 - scrubAmount * 0.6);
+-    renderCurve(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor);
++    renderFn(strokeColor, lineAlpha, fillAlpha);
+     ctx.restore();
+   } else {
+-    renderCurve(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor);
++    renderFn(strokeColor, lineAlpha, fillAlpha);
+   }
+   ctx.restore();
+   if (!skipDashLine) {
+@@ -610,6 +693,9 @@ function drawCrosshair(ctx, layout, palette, hoverX, hoverValue, hoverTime, form
+   const valueText = formatValue(hoverValue);
+   const timeText = formatTime(hoverTime);
+   const separator = "  \xB7  ";
++  const vNum = Number(hoverValue);
++  const valueFill =
++    vNum > 0 ? "#22c55e" : vNum < 0 ? "#ef4444" : palette.tooltipText;
+   ctx.save();
+   ctx.globalAlpha = scrubOpacity;
+   ctx.font = '400 13px "SF Mono", Menlo, monospace';
+@@ -632,7 +718,7 @@ function drawCrosshair(ctx, layout, palette, hoverX, hoverValue, hoverTime, form
+     ctx.strokeText(valueText, tx, ty);
+     ctx.strokeText(separator + timeText, tx + valueW, ty);
+   }
+-  ctx.fillStyle = palette.tooltipText;
++  ctx.fillStyle = valueFill;
+   ctx.fillText(valueText, tx, ty);
+   ctx.fillStyle = palette.gridLabel;
+   ctx.fillText(separator + timeText, tx + valueW, ty);
+@@ -677,7 +763,10 @@ function drawMultiCrosshair(ctx, layout, palette, hoverX, hoverTime, entries, fo
+     segments.push({ text: dotInline, color: e.color, isDot: true });
+     const label = e.label ? `${e.label} ` : "";
+     if (label) segments.push({ text: label, color: palette.gridLabel });
+-    segments.push({ text: formatValue(e.value), color: palette.tooltipText });
++    const vNum = Number(e.value);
++    const valColor =
++      vNum > 0 ? "#22c55e" : vNum < 0 ? "#ef4444" : palette.gridLabel;
++    segments.push({ text: formatValue(e.value), color: valColor });
+   }
+   let totalW = 0;
+   const segWidths = [];
+@@ -1324,12 +1413,15 @@ function drawLineModeCrosshair(ctx, layout, palette, hoverX, value, hoverTime, f
+   if (opacity < 0.1 || layout.w < 200) return;
+   const val = formatValue(value);
+   const time = formatTime(hoverTime);
++  const vNum = Number(value);
++  const valCol =
++    vNum > 0 ? "#22c55e" : vNum < 0 ? "#ef4444" : palette.line;
+   ctx.save();
+   ctx.globalAlpha = opacity;
+   ctx.font = '400 13px "SF Mono", Menlo, monospace';
+   ctx.textAlign = "left";
+   const parts = [
+-    { text: val, color: palette.line },
++    { text: val, color: valCol },
+     { text: "  \xB7  ", color: palette.gridLabel },
+     { text: time, color: palette.gridLabel }
+   ];
+@@ -1600,6 +1692,9 @@ function drawMultiFrame(ctx, layout, opts) {
      if (combinedAlpha < 0.01) continue;
      ctx.save();
      if (combinedAlpha < 1) ctx.globalAlpha = combinedAlpha;
 +    const ext = s.extendToNow !== false;
++    const lin = s.linear === true;
++    const sess = s.sessions ?? null;
      const pts = drawLine(
        ctx,
        layout,
-@@ -1612,7 +1617,11 @@ function drawMultiFrame(ctx, layout, opts) {
+@@ -1612,7 +1707,13 @@ function drawMultiFrame(ctx, layout, opts) {
        scrubX,
        opts.scrubAmount,
        reveal,
@@ -222,30 +635,45 @@ index fd05062..7a7e740 100644
 +      1,
 +      true,
 +      1,
-+      ext
++      ext,
++      lin,
++      sess
      );
      ctx.restore();
      if (pts && pts.length > 0) {
-@@ -2584,7 +2593,8 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -1963,8 +2064,8 @@ var VALUE_SNAP_THRESHOLD = 1e-3;
+ var ADAPTIVE_SPEED_BOOST = 0.2;
+ var MOMENTUM_GREEN = [34, 197, 94];
+ var MOMENTUM_RED = [239, 68, 68];
+-var CHART_REVEAL_SPEED = 0.14;
+-var CHART_REVEAL_SPEED_FWD = 0.09;
++var CHART_REVEAL_SPEED = 1;
++var CHART_REVEAL_SPEED_FWD = 1;
+ var PAUSE_PROGRESS_SPEED = 0.12;
+ var PAUSE_CATCHUP_SPEED = 0.08;
+ var PAUSE_CATCHUP_SPEED_FAST = 0.22;
+@@ -2584,7 +2685,10 @@ function useLivelineEngine(canvasRef, containerRef, config) {
            data: s.data.slice(),
            value: s.value,
            palette: s.palette,
 -          label: s.label
 +          label: s.label,
-+          extendToNow: s.extendToNow !== false
++          extendToNow: s.extendToNow !== false,
++          linear: s.linear === true,
++          sessions: s.sessions ?? null
          }));
        }
        if (hasData && !cfg.isMultiSeries) lastMultiSeriesRef.current = [];
-@@ -3154,7 +3164,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -3154,7 +3258,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
              if (range.min < globalMin) globalMin = range.min;
              if (range.max > globalMax) globalMax = range.max;
            }
 -          seriesEntries.push({ visible, smoothValue: sv, palette: s.palette, label: s.label, alpha });
-+          seriesEntries.push({ visible, smoothValue: sv, palette: s.palette, label: s.label, alpha, extendToNow: s.extendToNow !== false });
++          seriesEntries.push({ visible, smoothValue: sv, palette: s.palette, label: s.label, alpha, extendToNow: s.extendToNow !== false, linear: s.linear === true, sessions: s.sessions ?? null });
          }
        }
        if (seriesEntries.length === 0) {
-@@ -3176,7 +3186,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
+@@ -3176,7 +3280,7 @@ function useLivelineEngine(canvasRef, containerRef, config) {
          rafRef.current = requestAnimationFrame(draw);
          return;
        }
@@ -254,7 +682,7 @@ index fd05062..7a7e740 100644
        const adaptiveSpeed = cfg.lerpSpeed + ADAPTIVE_SPEED_BOOST * 0.5;
        const rangeResult = updateRange(
          computedRange,
-@@ -3532,6 +3542,8 @@ function Liveline({
+@@ -3532,6 +3636,8 @@ function Liveline({
    onModeChange,
    onSeriesToggle,
    seriesToggleCompact = false,
@@ -263,17 +691,35 @@ index fd05062..7a7e740 100644
    lineWidth,
    className,
    style
-@@ -3567,7 +3579,8 @@ function Liveline({
-       data: s.data,
-       value: s.value,
-       palette: seriesPalettes.get(s.id) ?? resolveTheme(s.color || SERIES_COLORS[i % SERIES_COLORS.length], theme),
+@@ -3562,13 +3668,20 @@ function Liveline({
+   }, [seriesProp, theme]);
+   const multiSeries = useMemo(() => {
+     if (!seriesProp || !seriesPalettes) return void 0;
+-    return seriesProp.map((s, i) => ({
+-      id: s.id,
+-      data: s.data,
+-      value: s.value,
+-      palette: seriesPalettes.get(s.id) ?? resolveTheme(s.color || SERIES_COLORS[i % SERIES_COLORS.length], theme),
 -      label: s.label
-+      label: s.label,
-+      extendToNow: s.extendToNow !== false
-     }));
+-    }));
++    return seriesProp.map((s, i) => {
++      const basePalette = seriesPalettes.get(s.id) ?? resolveTheme(s.color || SERIES_COLORS[i % SERIES_COLORS.length], theme);
++      const palette = s.lineWidth != null ? { ...basePalette, lineWidth: s.lineWidth } : basePalette;
++      return {
++        id: s.id,
++        data: s.data,
++        value: s.value,
++        palette,
++        label: s.label,
++        extendToNow: s.extendToNow !== false,
++        linear: s.linear === true,
++        sessions: s.sessions ?? null
++      };
++    });
    }, [seriesProp, seriesPalettes, theme]);
    const showMomentum = momentum !== false;
-@@ -3668,7 +3681,8 @@ function Liveline({
+   const momentumOverride = typeof momentum === "string" ? momentum : void 0;
+@@ -3668,7 +3781,8 @@ function Liveline({
      lineValue,
      multiSeries,
      isMultiSeries,
@@ -283,7 +729,7 @@ index fd05062..7a7e740 100644
    });
    const cursorStyle = scrub ? cursor : "default";
    const activeColor = isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)";
-@@ -3878,7 +3892,7 @@ function Liveline({
+@@ -3878,7 +3992,7 @@ function Liveline({
            ]
          }
        ),
