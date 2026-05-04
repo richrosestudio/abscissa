@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
 import type { Holding, SeriesData, Theme, TimeRange } from '../types'
 import { pctToColor } from '../utils/colors'
 import LineStylePicker from './LineStylePicker'
@@ -130,6 +130,10 @@ export default function BottomStrip({
   const styleAnchorRef = useRef<HTMLButtonElement | null>(null)
   const lineAppearancePopupRef = useRef<HTMLDivElement | null>(null)
   const stylePopup = useAnchoredPopup(styleAnchorRef)
+
+  const chipsRef = useRef<HTMLDivElement | null>(null)
+  const chipsScrollLeftRef = useRef(0)
+  const prevHoveredTimeRef = useRef<number | null>(null)
 
   // --- pct animation ---
   useEffect(() => {
@@ -302,6 +306,21 @@ export default function BottomStrip({
     }
   }, [highlightedIdx])
 
+  const onChipsScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    chipsScrollLeftRef.current = e.currentTarget.scrollLeft
+  }, [])
+
+  // When chart scrub ends, chip widths shrink — restore horizontal scroll so the strip doesn't jump.
+  useLayoutEffect(() => {
+    const prev = prevHoveredTimeRef.current
+    prevHoveredTimeRef.current = hoveredTime ?? null
+    if (prev == null || hoveredTime != null) return
+    const el = chipsRef.current
+    if (!el) return
+    const max = Math.max(0, el.scrollWidth - el.clientWidth)
+    el.scrollLeft = Math.min(chipsScrollLeftRef.current, max)
+  }, [hoveredTime])
+
   const note = pctFootnote(timeRange)
   const tooltipText = `${note.short}\n\n${note.detail}`
 
@@ -322,7 +341,12 @@ export default function BottomStrip({
       </button>
 
       {/* Scrollable ticker chips */}
-      <div className="strip-chips" role="list">
+      <div
+        ref={chipsRef}
+        className="strip-chips"
+        role="list"
+        onScroll={onChipsScroll}
+      >
         {stripHoldings.map(h => {
           const anim = animPcts[h.id] ?? { displayed: 0, target: 0 }
           const pct = anim.displayed
