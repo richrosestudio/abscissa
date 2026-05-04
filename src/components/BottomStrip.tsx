@@ -96,14 +96,15 @@ function useAnchoredPopup(anchorRef: React.RefObject<HTMLElement | null>) {
 function pctBaselineFootnote(timeRange: TimeRange): { text: string; title: string } {
   if (timeRange === '1D') {
     return {
-      text: 'Change vs prior close pre-open, then vs session open.',
+      text: "Today's %: vs yesterday's close before the open, then vs today's open once trading starts.",
       title:
-        'Before regular hours, change is vs the previous session close. During regular hours, vs the cash session open.',
+        'Extended hours use the previous closing price as the baseline. Regular trading hours use the official opening price for that session.',
     }
   }
   return {
-    text: 'Change vs first price in range.',
-    title: 'Percent change is relative to the first valid price at the start of the selected range.',
+    text: `This range: % change from each line's first price in the ${timeRange} window.`,
+    title:
+      'The baseline is the first reliable closing price at the start of the period you selected (1W, 1M, etc.).',
   }
 }
 
