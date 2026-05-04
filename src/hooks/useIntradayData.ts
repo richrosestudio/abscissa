@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Holding, SeriesData, TimeRange } from '../types'
-import { shouldPoll } from '../utils/exchange'
+import { isExchangeOpen, shouldPoll } from '../utils/exchange'
 import {
   getMockSeriesData,
   getMockHistoricalData,
@@ -25,6 +25,14 @@ function mergeIntradayFromApi(
   const nextData: Record<string, SeriesData> = {}
 
   for (const h of holdings) {
+    // Portfolio-wide polling while any venue is open — but once this symbol's exchange is
+    // closed, freeze its intraday path so Yahoo revisions don't nudge the line; chart carries
+    // flat to "now" via ensureDrawableInWindow.
+    if (!isExchangeOpen(h.exchange) && prev[h.id]?.points?.length) {
+      nextData[h.id] = prev[h.id]
+      continue
+    }
+
     const entry = json.series?.[h.id] as
       | { points?: { t: number; pct: number }[]; meta?: { openPrice?: number; currency?: string }; error?: string }
       | undefined

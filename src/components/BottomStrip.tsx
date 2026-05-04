@@ -314,20 +314,25 @@ export default function BottomStrip({
         {holdings.map(h => {
           const anim = animPcts[h.id] ?? { displayed: 0, target: 0 }
           const pct = anim.displayed
-          const pctColor = pctToColor(pct, theme)
           const isFocused = focusedId === h.id
           const isDimmed  = focusedId !== null && !isFocused
 
+          let hovPct: number | null = null
           let hoveredPrice: string | null = null
           if (hoveredTime != null) {
             const sd = seriesData[h.id]
             if (sd?.openPrice != null && sd.points.length > 0) {
-              const hovPct = nearestPct(sd.points, hoveredTime)
-              if (hovPct !== null) {
-                hoveredPrice = formatPrice(sd.openPrice * (1 + hovPct / 100), sd.currency)
+              const hp = nearestPct(sd.points, hoveredTime)
+              if (hp !== null) {
+                hovPct = hp
+                hoveredPrice = formatPrice(sd.openPrice * (1 + hp / 100), sd.currency)
               }
             }
           }
+
+          const isScrubbing = hoveredTime != null && hovPct !== null
+          const displayPct = isScrubbing ? hovPct! : pct
+          const displayColor = pctToColor(displayPct, theme)
 
           const errMsg = tickerErrors[h.id]
 
@@ -362,11 +367,14 @@ export default function BottomStrip({
               <span className="chip-ticker">{h.ticker}</span>
               <span className="chip-exch">{h.exchange}</span>
 
-              {/* % and hover price always on same line — no height change */}
-              <span className="chip-pct" style={{ color: pctColor }}>
-                {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
-                {hoveredPrice && (
+              {/* Hover %: primary when scrubbing, live % secondary; live % only when not scrubbing */}
+              <span className="chip-pct" style={{ color: displayColor }}>
+                {displayPct >= 0 ? '+' : ''}{displayPct.toFixed(2)}%
+                {isScrubbing && hoveredPrice && (
                   <span className="chip-price"> · {hoveredPrice}</span>
+                )}
+                {isScrubbing && (
+                  <span className="chip-live"> / {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%</span>
                 )}
               </span>
 
