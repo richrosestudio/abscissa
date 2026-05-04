@@ -1,5 +1,5 @@
 diff --git a/node_modules/liveline/dist/index.cjs b/node_modules/liveline/dist/index.cjs
-index 4709730..5493bae 100644
+index 4709730..25980e4 100644
 --- a/node_modules/liveline/dist/index.cjs
 +++ b/node_modules/liveline/dist/index.cjs
 @@ -387,7 +387,7 @@ function blendColor(c1, c2, t) {
@@ -57,7 +57,7 @@ index 4709730..5493bae 100644
  }
 -function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scrubX, scrubAmount = 0, chartReveal = 1, now_ms = 0, colorBlend = 1, skipDashLine = false, fillScale = 1) {
 +var SESSION_DIM_ALPHA = 0.35;
-+var SESSION_FADE_SECS = 600;
++var SESSION_FADE_SECS = 0;
 +function renderCurveWithSessions(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor, linear, sessions) {
 +  if (!sessions) {
 +    renderCurve(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor, linear);
@@ -482,7 +482,7 @@ index 414c4e6..fbee216 100644
      style?: CSSProperties;
  }
 diff --git a/node_modules/liveline/dist/index.js b/node_modules/liveline/dist/index.js
-index fd05062..6ff8a74 100644
+index fd05062..fa00daa 100644
 --- a/node_modules/liveline/dist/index.js
 +++ b/node_modules/liveline/dist/index.js
 @@ -360,7 +360,7 @@ function blendColor(c1, c2, t) {
@@ -540,7 +540,7 @@ index fd05062..6ff8a74 100644
  }
 -function drawLine(ctx, layout, palette, visible, smoothValue, now, showFill, scrubX, scrubAmount = 0, chartReveal = 1, now_ms = 0, colorBlend = 1, skipDashLine = false, fillScale = 1) {
 +var SESSION_DIM_ALPHA = 0.35;
-+var SESSION_FADE_SECS = 600;
++var SESSION_FADE_SECS = 0;
 +function renderCurveWithSessions(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor, linear, sessions) {
 +  if (!sessions) {
 +    renderCurve(ctx, layout, palette, pts, showFill, lineAlpha, fillAlpha, strokeColor, linear);
