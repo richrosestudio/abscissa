@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { Holding, SeriesData, Theme, TimeRange } from '../types'
 import { pctToColor } from '../utils/colors'
 import LineStylePicker from './LineStylePicker'
@@ -173,6 +173,18 @@ export default function BottomStrip({
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [])
 
+  const sortedHoldings = useMemo(() => {
+    return [...holdings].sort((a, b) => {
+      const pa = seriesData[a.id]?.latestPct ?? 0
+      const pb = seriesData[b.id]?.latestPct ?? 0
+      if (pb !== pa) return pb - pa
+      return a.ticker.localeCompare(b.ticker)
+    })
+  }, [holdings, seriesData])
+
+  const stripHoldings =
+    focusedId != null ? sortedHoldings.filter(h => h.id === focusedId) : sortedHoldings
+
   // --- search ---
   const runSearch = useCallback(async (q: string) => {
     if (q.length < 1) { setSearchResults([]); setSearchOpen(false); return }
@@ -311,7 +323,7 @@ export default function BottomStrip({
 
       {/* Scrollable ticker chips */}
       <div className="strip-chips" role="list">
-        {holdings.map(h => {
+        {stripHoldings.map(h => {
           const anim = animPcts[h.id] ?? { displayed: 0, target: 0 }
           const pct = anim.displayed
           const isFocused = focusedId === h.id
