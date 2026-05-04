@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import YahooFinance from 'yahoo-finance2'
-import { parseSearchQuery, sendInternalError, logServerError, isValidSymbol } from './_security'
+import { parseSearchQuery, sendInternalError, logServerError, isValidSymbol } from './_security.js'
 
 const yahooFinance = new YahooFinance()
 
@@ -28,6 +28,14 @@ export interface SearchResponse {
   results: SearchResult[]
 }
 
+interface YahooSearchQuote {
+  symbol?: string
+  quoteType?: string
+  shortname?: string
+  longname?: string
+  exchDisp?: string
+}
+
 /**
  * GET /api/search?q=AAPL
  *
@@ -46,10 +54,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const data = await yahooFinance.search(qRaw, {
+    const rawSearch = await yahooFinance.search(qRaw, {
       newsCount: 0,
       quotesCount: 8,
     })
+    const data = rawSearch as { quotes?: YahooSearchQuote[] }
 
     const results: SearchResult[] = (data.quotes ?? [])
       .filter(item =>
@@ -58,14 +67,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
       .slice(0, 8)
       .map(item => ({
-        symbol: normalizeSearchSymbol(
-          item.symbol ?? '',
-          (item as { exchDisp?: string }).exchDisp ?? '',
-        ),
-        name: (item as { shortname?: string; longname?: string }).shortname
-          ?? (item as { shortname?: string; longname?: string }).longname
-          ?? item.symbol ?? '',
-        exchange: (item as { exchDisp?: string }).exchDisp ?? '',
+        symbol: normalizeSearchSymbol(item.symbol ?? '', item.exchDisp ?? ''),
+        name: item.shortname ?? item.longname ?? item.symbol ?? '',
+        exchange: item.exchDisp ?? '',
         type: item.quoteType ?? '',
       }))
       .filter(r => isValidSymbol(r.symbol))

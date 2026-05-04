@@ -1,6 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import YahooFinance from 'yahoo-finance2'
-import { parseSymbolsParam, logServerError } from './_security'
+import { parseSymbolsParam, logServerError } from './_security.js'
+
+/** Minimal chart payload — yahoo-finance2 can type chart() as `unknown` under strict NodeNext builds (e.g. Vercel). */
+interface YahooChartPayload {
+  quotes?: unknown[]
+  meta?: {
+    previousClose?: number | null
+    chartPreviousClose?: number | null
+    regularMarketPrice?: number | null
+    currency?: string
+  }
+}
 
 // yahoo-finance2 v3 requires instantiation
 const yahooFinance = new YahooFinance()
@@ -212,13 +223,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const exchange = detectExchange(symbol)
 
-        const cleanFromChart = (
-          chart: Awaited<ReturnType<typeof yahooFinance.chart>>,
-        ) => {
+        const cleanFromChart = (chart: YahooChartPayload) => {
           const quotes = chart.quotes ?? []
           return quotes
             .map(q => {
-              const ts = quoteTimestamp(q)
+              const ts = quoteTimestamp(q as { date?: Date | number | string })
               const raw = q as {
                 close?: number | null
                 open?: number | null
@@ -244,15 +253,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Try today's window first; fall back to 72-hour rolling window.
         // No explicit period2 — Yahoo defaults to "now" for live/partial sessions,
         // which ensures today's LSE/TSE bars are returned when markets are open.
-        let chart: Awaited<ReturnType<typeof yahooFinance.chart>> | null = null
+        let chart: YahooChartPayload | null = null
         let cleaned: ReturnType<typeof cleanFromChart> = []
 
         for (const period1 of [todayStart, rollingStart]) {
-          const c = await yahooFinance.chart(symbol, {
+          const c = (await yahooFinance.chart(symbol, {
             period1,
             interval: '1m',
             includePrePost: true,
-          })
+          })) as YahooChartPayload
           const candidate = cleanFromChart(c)
           if (candidate.length > 0) {
             chart = c
@@ -266,7 +275,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return
         }
 
-        const meta = chart.meta
+        const meta = chart.meta ?? {}
         const prevClose =
           meta.previousClose != null && meta.previousClose > 0
             ? meta.previousClose

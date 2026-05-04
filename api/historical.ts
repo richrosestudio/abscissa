@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import YahooFinance from 'yahoo-finance2'
-import { parseSymbolsParam, logServerError } from './_security'
+import { parseSymbolsParam, logServerError } from './_security.js'
 
 const yahooFinance = new YahooFinance()
 

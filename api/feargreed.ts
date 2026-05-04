@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { sendInternalError, logServerError } from './_security'
+import { sendInternalError, logServerError } from './_security.js'
 
 function toFiniteScore(v: unknown): number | null {
   const n = typeof v === 'number' ? v : Number(v)
