@@ -282,6 +282,15 @@
   color: var(--text);
 }
 
+.lsp-stroke-btn:focus-visible,
+.lsp-weight-btn:focus-visible,
+.lsp-seg:focus-visible,
+.lsp-ramp-dot:focus-visible,
+.lsp-mini-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 /* ---------- embedded colour picker ---------- */
 .lsp-picker-embed {
   margin-top: 8px;

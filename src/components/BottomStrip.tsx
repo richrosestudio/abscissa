@@ -321,8 +321,59 @@ export default function BottomStrip({
     el.scrollLeft = Math.min(chipsScrollLeftRef.current, max)
   }, [hoveredTime])
 
+  const [errPopover, setErrPopover] = useState<{
+    id: string
+    ticker: string
+    msg: string
+    bottom: number
+    left: number
+  } | null>(null)
+  const errPopoverRef = useRef<HTMLDivElement | null>(null)
+  const errBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+
+  const openErrPopover = useCallback((h: Holding, msg: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const btn = errBtnRefs.current[h.id]
+    if (!btn) return
+    const r = btn.getBoundingClientRect()
+    setErrPopover(prev => {
+      if (prev?.id === h.id) return null
+      return {
+        id: h.id,
+        ticker: h.ticker,
+        msg,
+        bottom: window.innerHeight - r.top + 8,
+        left: r.left,
+      }
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!errPopover) return
+    if (!tickerErrors[errPopover.id]) setErrPopover(null)
+  }, [errPopover, tickerErrors])
+
+  useEffect(() => {
+    if (!errPopover) return
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (errPopoverRef.current?.contains(t)) return
+      const btn = errBtnRefs.current[errPopover.id]
+      if (btn?.contains(t)) return
+      setErrPopover(null)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setErrPopover(null)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [errPopover])
   const note = pctFootnote(timeRange)
-  const tooltipText = `${note.short}\n\n${note.detail}`
+  const tooltipText = `${note.short}\n\n${note.detail}\n\nOrange ! on a ticker: live data may be missing, delayed, or simulated for that symbol — tap the icon for details.`
 
   const isEmpty = holdings.length === 0
 
@@ -378,7 +429,6 @@ export default function BottomStrip({
               role="listitem"
               className={`strip-chip${isFocused ? ' focused' : ''}${isDimmed ? ' dimmed' : ''}${errMsg ? ' strip-chip--warn' : ''}`}
               onClick={() => onFocus(h.id)}
-              title={errMsg ? `Data issue: ${errMsg}` : undefined}
               aria-invalid={errMsg ? true : undefined}
             >
               {/* Color swatch — opens line appearance picker */}
@@ -402,9 +452,17 @@ export default function BottomStrip({
               />
 
               {errMsg && (
-                <span className="chip-data-warning" title={errMsg} aria-label={`Data issue: ${errMsg}`}>
+                <button
+                  type="button"
+                  className="chip-data-warning"
+                  ref={el => { errBtnRefs.current[h.id] = el }}
+                  onClick={e => openErrPopover(h, errMsg, e)}
+                  aria-expanded={errPopover?.id === h.id}
+                  aria-haspopup="dialog"
+                  aria-label={`Data issue for ${h.ticker}. Open details.`}
+                >
                   !
-                </span>
+                </button>
               )}
 
               <span className="chip-ticker">{h.ticker}</span>
@@ -440,7 +498,7 @@ export default function BottomStrip({
           type="button"
           className="strip-info"
           title={tooltipText}
-          aria-label="About percentage changes"
+          aria-label="About percentage math, extended hours, and the orange data-warning icon on tickers"
         >
           ?
         </button>
@@ -496,6 +554,39 @@ export default function BottomStrip({
           )}
         </div>
       </div>
+
+      {errPopover && (
+        <Portal>
+          <div
+            ref={errPopoverRef}
+            className="chip-error-popover"
+            role="dialog"
+            aria-labelledby="chip-error-popover-title"
+            style={{
+              position: 'fixed',
+              bottom: errPopover.bottom,
+              left: errPopover.left,
+              zIndex: 9999,
+            }}
+          >
+            <h2 id="chip-error-popover-title" className="chip-error-popover__title">
+              Data for {errPopover.ticker}
+            </h2>
+            <p className="chip-error-popover__lead">
+              Live quote or intraday data for this symbol may be missing, incomplete, or simulated.
+              The chart can still show a series while this notice is active.
+            </p>
+            <p className="chip-error-popover__detail">{errPopover.msg}</p>
+            <button
+              type="button"
+              className="chip-error-popover__close"
+              onClick={() => setErrPopover(null)}
+            >
+              Close
+            </button>
+          </div>
+        </Portal>
+      )}
 
       {/* Line-appearance portal (needs to float above the chart canvas) */}
       {stylePickerId && stylePopup.pos && (() => {

@@ -3,6 +3,25 @@
 html, body, #root { height: 100%; }
 body { overflow: hidden; }
 
+/* Shared keyboard focus — interactive controls only */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role='button']:focus-visible,
+[role='radio']:focus-visible,
+[role='switch']:focus-visible,
+[role='menuitem']:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: var(--ring-offset);
+}
+
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible) {
+  outline: none;
+}
+
 /* ─── Theme tokens ───────────────────────────────────────────── */
 :root, [data-theme="dark"] {
   --bg:           #0a0a0f;
@@ -20,6 +39,9 @@ body { overflow: hidden; }
   --clock-rim:    rgba(255,255,255,0.12);
   --wordmark-color: rgba(255,255,255,0.9);
   --hover-bg:     rgba(255,255,255,0.06);
+  /* Keyboard focus ring */
+  --ring:         rgba(255,255,255,0.45);
+  --ring-offset:  2px;
 }
 
 [data-theme="light"] {
@@ -38,6 +60,8 @@ body { overflow: hidden; }
   --clock-rim:    rgba(0,0,0,0.12);
   --wordmark-color: rgba(0,0,0,0.85);
   --hover-bg:     rgba(0,0,0,0.05);
+  --ring:         rgba(0,0,0,0.35);
+  --ring-offset:  2px;
 }
 
 /* ─── Layout ────────────────────────────────────────────────── */

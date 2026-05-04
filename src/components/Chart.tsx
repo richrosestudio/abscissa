@@ -2,6 +2,7 @@ import { useMemo, useRef, useEffect, useState, useCallback, forwardRef, useImper
 import { Liveline } from 'liveline'
 import type { LivelinePoint, LivelineSeries } from 'liveline'
 import type { Exchange, Holding, SeriesData, Theme, TimeRange } from '../types'
+import { detectExchange } from '../utils/exchange'
 import { computeDataDomain } from '../utils/yAxis'
 import './Chart.css'
 
@@ -52,9 +53,14 @@ export interface ChartRef {
   resetView: () => void
 }
 
-// Zone colours — keep closed periods quiet so open market hours remain the focus
+// Zone colours — open: solid green tint; closed: warm red gradient (Fear & Greed bar red #ef4444)
 const OPEN_ZONE = 'rgba(34,197,94,0.055)'
-const CLOSED_ZONE = 'rgba(239,68,68,0.022)'
+const CLOSED_ZONE_BG =
+  'linear-gradient(90deg, rgba(239,68,68,0.04) 0%, rgba(239,68,68,0.078) 45%, rgba(239,68,68,0.068) 55%, rgba(239,68,68,0.04) 100%)'
+/** When merged session interval ends flush with the live cap, end was clipped — not a real session close. */
+const SESSION_CLOSE_MARKER_MIN_GAP_SEC = 90
+/** ~2px at ~650px plot: venue cash times aligned within this fraction collapse to one tick. */
+const SESSION_MARKER_DEDUPE_FRAC = 0.0032
 const LIVELINE_RIGHT_BUFFER = 0.015
 
 interface MarketZone {
@@ -394,8 +400,33 @@ function computeZones(
   return segments.map(s => ({
     left: (s.start - leftEdge) / windowWidth,
     width: (s.end - s.start) / windowWidth,
-    color: s.open ? OPEN_ZONE : CLOSED_ZONE,
+    color: s.open ? OPEN_ZONE : CLOSED_ZONE_BG,
   }))
+}
+
+function getActiveExchangesForSessionUI(
+  hasLSE: boolean,
+  hasUS: boolean,
+  hasTSE: boolean,
+  selectedExchange: Exchange | null,
+): Exchange[] {
+  if (selectedExchange) return [selectedExchange]
+  return [
+    ...(hasLSE ? (['LSE'] as const) : []),
+    ...(hasUS ? (['US'] as const) : []),
+    ...(hasTSE ? (['TSE'] as const) : []),
+  ]
+}
+
+function dedupeMarkerFractions(fractions: number[], eps: number): SessionMarker[] {
+  if (fractions.length === 0) return []
+  const sorted = [...fractions].sort((a, b) => a - b)
+  const uniq: number[] = [sorted[0]!]
+  for (let i = 1; i < sorted.length; i++) {
+    const v = sorted[i]!
+    if (v - uniq[uniq.length - 1]! >= eps) uniq.push(v)
+  }
+  return uniq.map(left => ({ left }))
 }
 
 function computeSessionMarkers(
@@ -407,35 +438,54 @@ function computeSessionMarkers(
   plotRightEdge: number,
   liveTimeSec: number,
 ): SessionMarker[] {
-  if (!hasLSE && !hasUS && !hasTSE && !selectedExchange) return []
+  const activeExchanges = getActiveExchangesForSessionUI(hasLSE, hasUS, hasTSE, selectedExchange)
+  if (activeExchanges.length === 0) return []
 
   const zoneEnd = Math.min(plotRightEdge, liveTimeSec)
   if (!(zoneEnd > leftEdge)) return []
 
-  const activeExchanges: Exchange[] = selectedExchange
-    ? [selectedExchange]
-    : [
-        ...(hasLSE ? (['LSE'] as const) : []),
-        ...(hasUS  ? (['US'] as const)  : []),
-        ...(hasTSE ? (['TSE'] as const) : []),
-      ]
-
-  const openIntervals = mergeIntervals(
-    activeExchanges.flatMap(exchange => getOpenIntervalsForExchange(exchange, leftEdge, zoneEnd)),
-  )
-
   const windowWidth = plotRightEdge - leftEdge
-  const markers: SessionMarker[] = []
+  const fracs: number[] = []
 
-  for (const interval of openIntervals) {
-    if (interval.start >= leftEdge && interval.start <= zoneEnd) {
-      markers.push({
-        left: (interval.start - leftEdge) / windowWidth,
-      })
+  for (const exchange of activeExchanges) {
+    for (const interval of getOpenIntervalsForExchange(exchange, leftEdge, zoneEnd)) {
+      if (interval.start >= leftEdge && interval.start <= zoneEnd) {
+        fracs.push((interval.start - leftEdge) / windowWidth)
+      }
     }
   }
 
-  return markers
+  return dedupeMarkerFractions(fracs, SESSION_MARKER_DEDUPE_FRAC)
+}
+
+function computeSessionCloseMarkers(
+  hasLSE: boolean,
+  hasUS: boolean,
+  hasTSE: boolean,
+  selectedExchange: Exchange | null,
+  leftEdge: number,
+  plotRightEdge: number,
+  liveTimeSec: number,
+): SessionMarker[] {
+  const activeExchanges = getActiveExchangesForSessionUI(hasLSE, hasUS, hasTSE, selectedExchange)
+  if (activeExchanges.length === 0) return []
+
+  const zoneEnd = Math.min(plotRightEdge, liveTimeSec)
+  if (!(zoneEnd > leftEdge)) return []
+
+  const windowWidth = plotRightEdge - leftEdge
+  const fracs: number[] = []
+
+  for (const exchange of activeExchanges) {
+    for (const interval of getOpenIntervalsForExchange(exchange, leftEdge, zoneEnd)) {
+      if (zoneEnd - interval.end < SESSION_CLOSE_MARKER_MIN_GAP_SEC) continue
+      if (interval.end >= leftEdge && interval.end <= zoneEnd) {
+        fracs.push((interval.end - leftEdge) / windowWidth)
+      }
+    }
+  }
+
+  return dedupeMarkerFractions(fracs, SESSION_MARKER_DEDUPE_FRAC)
 }
 
 const Chart = forwardRef<ChartRef, Props>(function Chart(
@@ -473,8 +523,7 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
     setChartHintDismissed(true)
   }, [])
   const [refLineGlow, setRefLineGlow] = useState(false)
-  const [clockTick, setClockTick] = useState(() => Date.now())
-  /** Cap zone shading at live time; rolling window still uses minute clockTick */
+  /** Drives visibleWindow + zone/session alignment with Liveline (1s tick in 1D). */
   const [zoneLiveMs, setZoneLiveMs] = useState(() => Date.now())
 
   // Interaction state — zoom overrides the default window; yDomainOverride pans the Y axis
@@ -523,22 +572,15 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
     }
   }, [seriesData, holdings])
 
-  // Keep the market-zone overlay aligned with Liveline's rolling time window.
-  useEffect(() => {
-    if (timeRange !== '1D') return
-    const id = setInterval(() => setClockTick(Date.now()), 60_000)
-    return () => clearInterval(id)
-  }, [timeRange])
-
   useEffect(() => {
     if (timeRange !== '1D') return
     const id = setInterval(() => setZoneLiveMs(Date.now()), 1000)
     return () => clearInterval(id)
   }, [timeRange])
 
-  const hasLSE = holdings.some(h => h.exchange === 'LSE')
-  const hasUS  = holdings.some(h => h.exchange === 'US')
-  const hasTSE = holdings.some(h => h.exchange === 'TSE')
+  const hasLSE = holdings.some(h => detectExchange(h.id) === 'LSE')
+  const hasUS  = holdings.some(h => detectExchange(h.id) === 'US')
+  const hasTSE = holdings.some(h => detectExchange(h.id) === 'TSE')
 
   const isIntraday = timeRange === '1D'
 
@@ -706,13 +748,13 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
   }, [])
 
   const visibleWindow = useMemo(() => {
-    const nowSec = clockTick / 1000 - panOffsetMs / 1000
+    const nowSec = zoneLiveMs / 1000 - panOffsetMs / 1000
     const rightEdge = nowSec + effectiveWindowSecs * LIVELINE_RIGHT_BUFFER
     return {
       leftEdge: rightEdge - effectiveWindowSecs,
       rightEdge,
     }
-  }, [clockTick, effectiveWindowSecs, panOffsetMs])
+  }, [zoneLiveMs, effectiveWindowSecs, panOffsetMs])
 
   // Build Liveline series array
   const series = useMemo((): LivelineSeries[] => {
@@ -752,7 +794,13 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
 
         let sessions: { start: number; end: number }[] | undefined
         if (timeRange === '1D' && zoneEnd > leftEdge) {
-          sessions = mergeIntervals(getOpenIntervalsForExchange(h.exchange, leftEdge, zoneEnd))
+          // When a header clock filter is active, match zone shading (single venue). Otherwise
+          // each line uses its listing venue from the ticker id (suffix), not stored exchange — so
+          // LSE names still fade with US hours when viewing "New York" only.
+          const exchangeForSessions: Exchange = selectedExchange ?? detectExchange(h.id)
+          sessions = mergeIntervals(
+            getOpenIntervalsForExchange(exchangeForSessions, leftEdge, zoneEnd),
+          )
         }
 
         return [
@@ -776,10 +824,10 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
     seriesData,
     focusedId,
     timeRange,
-    clockTick,
     visibleWindow.leftEdge,
     visibleWindow.rightEdge,
     zoneLiveMs,
+    selectedExchange,
   ])
 
   // Compute symmetric ±B% domain from all intraday points (single visible series)
@@ -835,13 +883,31 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
     [isIntraday, hasLSE, hasUS, hasTSE, selectedExchange, visibleWindow, zoneLiveMs],
   )
 
+  const sessionCloseMarkers = useMemo(
+    () =>
+      isIntraday
+        ? computeSessionCloseMarkers(
+            hasLSE,
+            hasUS,
+            hasTSE,
+            selectedExchange ?? null,
+            visibleWindow.leftEdge,
+            visibleWindow.rightEdge,
+            zoneLiveMs / 1000,
+          )
+        : [],
+    [isIntraday, hasLSE, hasUS, hasTSE, selectedExchange, visibleWindow, zoneLiveMs],
+  )
+
   // Replicate Liveline's internal labelReserve calculation so the zone overlay
   // stays aligned with the actual chart plotting area.
   // Liveline uses: chartW = w - pad.left - pad.right - labelReserve
   // where labelReserve = Math.max(0, maxLabelWidth - 2).
   // Our zone layer's right edge must shrink by the same amount.
   const labelReserve = useMemo(() => {
-    const labels = series.map(s => s.label).filter((l): l is string => Boolean(l))
+    const fromSeries = series.map(s => s.label).filter((l): l is string => Boolean(l))
+    const labels =
+      fromSeries.length > 0 ? fromSeries : holdings.map(h => h.ticker).filter(Boolean)
     if (labels.length === 0 || typeof document === 'undefined') return 0
     const cnv = document.createElement('canvas')
     const ctx = cnv.getContext('2d')
@@ -853,7 +919,7 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
       if (w > maxW) maxW = w
     }
     return Math.max(0, maxW - 2)
-  }, [series])
+  }, [series, holdings])
 
   const formatTime = useMemo(() => {
     const DAY  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
@@ -986,6 +1052,13 @@ const Chart = forwardRef<ChartRef, Props>(function Chart(
               <div
                 key={`session-open-${i}-${m.left.toFixed(6)}`}
                 className="market-session-marker"
+                style={{ left: `${(m.left * 100).toFixed(4)}%` }}
+              />
+            ))}
+            {sessionCloseMarkers.map((m, i) => (
+              <div
+                key={`session-close-${i}-${m.left.toFixed(6)}`}
+                className="market-session-close-marker"
                 style={{ left: `${(m.left * 100).toFixed(4)}%` }}
               />
             ))}

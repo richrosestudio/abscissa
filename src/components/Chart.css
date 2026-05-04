@@ -45,6 +45,11 @@
   background: var(--hover-bg);
 }
 
+.chart-hint-close:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 .chart-wrapper {
   flex: 1;
   min-height: 0;
@@ -156,6 +161,34 @@
   box-shadow: 0 0 5px rgba(22, 163, 74, 0.14);
 }
 
+/* Official cash session end — Fear & Greed red family, narrower than open marker */
+.market-session-close-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 2;
+  transition: left 0.5s ease;
+  border-radius: 1px;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(239, 68, 68, 0.55) 0 3px,
+    transparent 3px 5px
+  );
+  box-shadow: 0 0 5px rgba(239, 68, 68, 0.18);
+}
+
+[data-theme="light"] .market-session-close-marker {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(220, 38, 38, 0.6) 0 3px,
+    transparent 3px 5px
+  );
+  box-shadow: 0 0 5px rgba(220, 38, 38, 0.2);
+}
+
 /* Zero-line cross glow overlay — thin horizontal line at chart midpoint */
 .ref-line-glow {
   position: absolute;
@@ -198,4 +231,21 @@
   cursor: ns-resize;
   z-index: 3;
   touch-action: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liveline-container {
+    transition: none;
+  }
+
+  .market-zone,
+  .market-session-marker,
+  .market-session-close-marker {
+    transition: none;
+  }
+
+  .ref-line-glow.active {
+    animation: none;
+    opacity: 0;
+  }
 }

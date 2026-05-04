@@ -35,6 +35,10 @@ export default function App() {
 
   const { data: seriesData, usingMock, loading, perTickerErrors, simulatedReason } = useIntradayData(holdings, selectedRange)
 
+  const splashLoaded =
+    !loading &&
+    (holdings.length === 0 || holdings.every(h => seriesData[h.id] != null))
+
   // Persist
   useEffect(() => { saveTheme(theme) }, [theme])
   useEffect(() => { saveHoldings(holdings) }, [holdings])
@@ -128,7 +132,7 @@ export default function App() {
 
   return (
     <div className="app" data-idle={idle ? 'true' : undefined}>
-      <Splash loaded={!loading} />
+      <Splash loaded={splashLoaded} />
       <Header
         theme={theme}
         onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}

@@ -87,6 +87,7 @@ export default function Header({ theme, onToggleTheme, hoveredTime, selectedExch
       <div
         className="header-clocks"
         title="Click a city to show only that exchange’s session shading; click again to show all venues in your list."
+        aria-label="Session filters: click a city clock to shade the chart for that market only; click again to show all venues."
       >
         {CLOCKS.map(c => {
           const isSelected = selectedExchange === c.exchange

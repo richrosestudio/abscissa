@@ -74,14 +74,22 @@ export default function AnalogClock({ city, timezone, isOpen, scrubTime, selecte
 
   const selectionClass = selected ? 'selected' : unselected ? 'unselected' : ''
 
+  const label = `${city} clock, ${isOpen ? 'market open' : 'market closed'}${selected ? ', selected' : ''}. Toggle to filter the chart by this session.`
+
   return (
     <div
       className={`analog-clock ${isOpen ? 'open' : 'closed'} ${isScrubbing ? 'scrubbing' : ''} ${selectionClass}`}
       onClick={onClick}
       role="button"
       tabIndex={0}
-      onKeyDown={e => e.key === 'Enter' && onClick?.()}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick?.()
+        }
+      }}
       aria-pressed={selected}
+      aria-label={label}
     >
       <svg className="clock-face" viewBox="0 0 40 40" width="40" height="40">
         {/* Rim */}

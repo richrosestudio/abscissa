@@ -12,10 +12,17 @@ export default function Splash({ loaded }: Props) {
   useEffect(() => {
     if (!loaded) return
     const el = elRef.current
-    if (!el) { setExited(true); return }
-    const handler = () => setExited(true)
-    el.addEventListener('transitionend', handler, { once: true })
-    return () => el.removeEventListener('transitionend', handler)
+    if (!el) {
+      setExited(true)
+      return
+    }
+    const finish = () => setExited(true)
+    el.addEventListener('transitionend', finish, { once: true })
+    const t = window.setTimeout(finish, 900)
+    return () => {
+      el.removeEventListener('transitionend', finish)
+      window.clearTimeout(t)
+    }
   }, [loaded])
 
   if (exited) return null

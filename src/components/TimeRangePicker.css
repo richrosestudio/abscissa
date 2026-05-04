@@ -103,6 +103,19 @@
   color: var(--text-muted);
 }
 
+.trp-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trp-live-dot--on {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .trp-reset-icon {
   display: block;
   width: 14px;

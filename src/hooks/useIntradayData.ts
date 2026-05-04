@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Holding, SeriesData, TimeRange } from '../types'
-import { isExchangeOpen, shouldPoll } from '../utils/exchange'
+import { isExchangeOpen, shouldPoll, detectExchange } from '../utils/exchange'
 import {
   getMockSeriesData,
   getMockHistoricalData,
@@ -25,10 +25,12 @@ function mergeIntradayFromApi(
   const nextData: Record<string, SeriesData> = {}
 
   for (const h of holdings) {
+    // Venue from ticker suffix — not h.exchange (can be wrong if typed manually or legacy data).
+    const venue = detectExchange(h.id)
     // Portfolio-wide polling while any venue is open — but once this symbol's exchange is
     // closed, freeze its intraday path so Yahoo revisions don't nudge the line; chart carries
     // flat to "now" via ensureDrawableInWindow.
-    if (!isExchangeOpen(h.exchange) && prev[h.id]?.points?.length) {
+    if (!isExchangeOpen(venue) && prev[h.id]?.points?.length) {
       nextData[h.id] = prev[h.id]
       continue
     }
@@ -397,8 +399,8 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
     }
 
     // ── Intraday (1D) branch ────────────────────────────────────────────────
-    const exchanges = holdings.map(h => h.exchange)
-    if (!shouldPoll(exchanges)) {
+    const venues = holdings.map(h => detectExchange(h.id))
+    if (!shouldPoll(venues)) {
       // Markets closed — fetch completed session data for real closed-session lines;
       // fall back to animated mock only if the API yields nothing useful.
       ;(async () => {
@@ -423,8 +425,8 @@ export function useIntradayData(holdings: Holding[], timeRange: TimeRange = '1D'
 
     // Poll every 60s during market hours; switch to mock animation if markets close
     pollTimer.current = setInterval(() => {
-      const exch = holdings.map(h => h.exchange)
-      if (shouldPoll(exch)) {
+      const v = holdings.map(h => detectExchange(h.id))
+      if (shouldPoll(v)) {
         fetchData(signal)
       } else {
         if (pollTimer.current) clearInterval(pollTimer.current)
