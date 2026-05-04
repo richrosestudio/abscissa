@@ -1,10 +1,13 @@
-import type { Holding, Theme, LineStyle } from '../types'
+import type { Exchange, Holding, Theme, LineStyle } from '../types'
 
 const KEYS = {
   holdings: 'abscissa:holdings',
   theme: 'abscissa:theme',
   hidePctFootnote: 'abscissa:hidePctFootnote',
+  sessionExchange: 'abscissa:sessionExchange',
 }
+
+const EXCHANGES = new Set<Exchange>(['LSE', 'US', 'TSE'])
 
 const HOLDING_ID_RE = /^[A-Z0-9][A-Z0-9.\-^]{0,24}$/
 /** Display ticker: conservative allowlist */
@@ -96,4 +99,21 @@ export function loadPctFootnoteHidden(): boolean {
 
 export function savePctFootnoteHidden(hidden: boolean): void {
   localStorage.setItem(KEYS.hidePctFootnote, hidden ? '1' : '0')
+}
+
+/** Default US (New York) when unset; `"all"` in storage maps to `null` (every venue). */
+export function loadSessionExchange(): Exchange | null {
+  try {
+    const raw = localStorage.getItem(KEYS.sessionExchange)
+    if (raw === null) return 'US'
+    if (raw === 'all') return null
+    if (EXCHANGES.has(raw as Exchange)) return raw as Exchange
+    return 'US'
+  } catch {
+    return 'US'
+  }
+}
+
+export function saveSessionExchange(exchange: Exchange | null): void {
+  localStorage.setItem(KEYS.sessionExchange, exchange ?? 'all')
 }

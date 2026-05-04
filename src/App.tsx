@@ -2,7 +2,16 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Exchange, Holding, Theme, TimeRange } from './types'
 import { detectExchange, normalizeId } from './utils/exchange'
 import { nextColor } from './utils/colors'
-import { loadHoldings, saveHoldings, loadTheme, saveTheme, loadPctFootnoteHidden, savePctFootnoteHidden } from './utils/storage'
+import {
+  loadHoldings,
+  saveHoldings,
+  loadTheme,
+  saveTheme,
+  loadPctFootnoteHidden,
+  savePctFootnoteHidden,
+  loadSessionExchange,
+  saveSessionExchange,
+} from './utils/storage'
 import { updateFavicon } from './utils/favicon'
 import { useIntradayData } from './hooks/useIntradayData'
 import Header from './components/Header'
@@ -17,7 +26,7 @@ export default function App() {
   const [holdings, setHoldings] = useState<Holding[]>(() => loadHoldings())
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [hoveredTime, setHoveredTime] = useState<number | null>(null)
-  const [selectedExchange, setSelectedExchange] = useState<Exchange | null>(null)
+  const [selectedExchange, setSelectedExchange] = useState<Exchange | null>(() => loadSessionExchange())
   const [selectedRange, setSelectedRange] = useState<TimeRange>('1D')
   const chartRef = useRef<ChartRef | null>(null)
   const [chartCanReset, setChartCanReset] = useState(false)
@@ -43,6 +52,7 @@ export default function App() {
   useEffect(() => { saveTheme(theme) }, [theme])
   useEffect(() => { saveHoldings(holdings) }, [holdings])
   useEffect(() => { savePctFootnoteHidden(pctFootnoteHidden) }, [pctFootnoteHidden])
+  useEffect(() => { saveSessionExchange(selectedExchange) }, [selectedExchange])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
