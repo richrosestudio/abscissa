@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { Exchange, Holding, LineStyle, Theme, TimeRange } from './types'
+import type { Exchange, Holding, Theme, TimeRange } from './types'
 import { detectExchange, normalizeId } from './utils/exchange'
 import { nextColor } from './utils/colors'
 import { loadHoldings, saveHoldings, loadTheme, saveTheme, loadPctFootnoteHidden, savePctFootnoteHidden } from './utils/storage'

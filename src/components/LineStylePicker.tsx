@@ -56,17 +56,17 @@ export default function LineStylePicker({ holding, onStyleChange }: Props) {
   const addGradStop = () => {
     if (gradColors.length === 0) {
       onStyleChange({ gradientColors: [holding.color, holding.color] })
-    } else if (gradColors.length === 1) {
-      onStyleChange({ gradientColors: [gradColors[0], holding.color] as [string, string] })
-    } else {
-      onStyleChange({ gradientColors: [gradColors[0], gradColors[1], holding.color] as [string, string, string] })
+    } else if (gradColors.length === 2) {
+      onStyleChange({
+        gradientColors: [gradColors[0], gradColors[1], holding.color] as [string, string, string],
+      })
     }
   }
 
   const removeGradStop = (idx: number) => {
     if (gradPickerIdx === idx + 1) { setGradPickerIdx(0); setGradPickerPos(null) }
     const next = gradColors.filter((_, i) => i !== idx)
-    if (next.length === 0) {
+    if (next.length < 2) {
       onStyleChange({ gradientColors: undefined })
     } else {
       onStyleChange({ gradientColors: next as [string, string] | [string, string, string] })
@@ -167,7 +167,7 @@ export default function LineStylePicker({ holding, onStyleChange }: Props) {
           ))}
 
           {/* Add stop button (up to 2 extra stops = 3 total) */}
-          {gradColors.length < 2 && (
+          {(gradColors.length === 0 || gradColors.length === 2) && (
             <button
               type="button"
               className="lsp-grad-add"
