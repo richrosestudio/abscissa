@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "html2canvas": "^1.4.1",
-    "liveline": "latest",
+    "liveline": "0.0.7",
+    "patch-package": "^8.0.1",
     "react": "^19.0.0",
     "react-colorful": "^5.6.1",
     "react-dom": "^19.0.0",
@@ -23,7 +24,6 @@
     "@types/react-dom": "^19.0.0",
     "@vercel/node": "^5.7.13",
     "@vitejs/plugin-react": "^4.3.4",
-    "patch-package": "^8.0.0",
     "typescript": "~5.7.2",
     "vercel": "^52.2.1",
     "vite": "^6.3.0"
